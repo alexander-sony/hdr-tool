@@ -129,6 +129,8 @@ uv run hdr-suggest data/3f/long-13p2-9db.bin data/3f/short-3p3-9db.bin \
 
 Acceptance: one pair, composite gain ~11.95 dB (±0.15), low/high 3430/3730, Long clips (~7%), Short used in highlights.
 
+Viewer check of this 3F set (screenshots, not decoded by tests): [`data/3f/viewer/hdr-3f.png`](data/3f/viewer/hdr-3f.png) and [`data/3f/viewer/map-3f.png`](data/3f/viewer/map-3f.png). Composite uses black 240, gains 5.96/1 and 5.97/1, thresholds 3430/3730 and 6800/7400, blend 0.5/0.5, tone 0 (linearity). Map uses the same idea with gains rounded to 6 and Long–Mid thresholds 3400/3700, tone 1. On that map, red is Long (most of the frame), purple is Mid (brighter chart patches), cyan is Short (the two white patches), and orange/yellow rims are the blend zones.
+
 ## 8. Older verification vectors (camera gain 0 dB)
 
 | pair (long / short) | ratio seam | dB seam | dB global |
