@@ -6,16 +6,26 @@ File layout for AYA `.bin` → active `.raw`: see [`aya_bin_to_raw.md`](aya_bin_
 
 ## 1. Viewer model
 
+```mermaid
+flowchart LR
+  longBin[Long] --> blackL[BlackSub]
+  shortBin[Short] --> blackS[BlackSub]
+  blackS --> gain[xGain]
+  blackL --> chdr[CHDR]
+  gain --> chdr
+  chdr --> displayPath[WB demosaic ToneMap_8b]
+  displayPath --> display[display]
+  chdr --> savePath[AddBlack gamma_16b]
+  savePath --> resultBin[result.bin]
 ```
-Long  -> BlackSub(black) ---------------------------\
-Short -> BlackSub(black) -> xGain -> CHDR synth ----> WB -> demosaic -> ToneMap(8b) -> display
-                                                 \--> +black -> gamma(16b) -> result.bin
-CHDR, per pixel, v = Long - black  (compare AFTER black subtraction):
-  v <  Low           -> Long
-  v >= High          -> Short*G           (ceiling High <= clip_eff-1; viewer may use ">")
-  Low <= v < High    -> a*Long + (1-a)*Short*G     a = Blend, constant (not a ramp)
-G = 10^(gain_dB/20) * conversion_ratio          (fields multiply)
-```
+
+CHDR, per pixel, after black subtraction (`v = Long - black`):
+
+- `v < Low` → Long
+- `v >= High` → Short × G  (keep High ≤ clip_eff − 1; viewer may use `>`)
+- `Low <= v < High` → `a × Long + (1 − a) × Short × G`  (`a` = Blend, constant, not a ramp)
+
+`G = 10^(gain_dB/20) × conversion_ratio` (the two fields multiply). Tone mapping is on the display path only.
 
 - One black field for every frame. Tone mapping is display-only (0 = linear, higher lifts darks); default 1.
 - Conversion gain is the HG/LG efficiency ratio (slide example 2.6×). Same sensor mode → conversion = **1**; the whole exposure ratio goes into composite dB.
