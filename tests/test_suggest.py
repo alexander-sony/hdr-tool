@@ -13,6 +13,7 @@ from hdr_suggest.cli import main
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_3F = ROOT / "data" / "3f"
+DATA_HCG_LCG = ROOT / "data" / "hcg-lcg"
 
 
 def _write_raw(path: Path, image: np.ndarray, bits: int = 12) -> Path:
@@ -181,3 +182,69 @@ def test_data_3f_long_short_as_2f() -> None:
     assert pair["high"] == 3730
     assert pair["long_clipped_pct"] > 1.0
     assert not any("Short adds nothing" in w for w in result["warnings"])
+
+
+def test_cg_mode_puts_ratio_in_conversion(tmp_path: Path) -> None:
+    rng = np.random.default_rng(1)
+    height, width = 128, 128
+    black = 240.0
+    signal = rng.uniform(200, 1500, size=(height, width))
+    long_img = np.clip(np.round(black + signal), 0, 4095).astype(np.uint16)
+    short_img = np.clip(np.round(black + signal / 2.9), 0, 4095).astype(np.uint16)
+    long_img[0:4, 0:4] = 4095
+    p_long = _write_raw(tmp_path / "hcg", long_img)
+    p_short = _write_raw(tmp_path / "lcg", short_img)
+    result = suggest.analyse(
+        [p_long, p_short],
+        black=240,
+        cg_modes=["hcg", "lcg"],
+        cam_gain_db=[3.0, 3.0],
+    )
+    pair = result["pairs"][0]
+    assert pair["gain_dB"] == pytest.approx(0.0, abs=0.01)
+    assert pair["conversion_gain_ratio"] == pytest.approx(2.9, rel=0.08)
+
+
+def test_cg_mode_mixed_3f(tmp_path: Path) -> None:
+    """Long and Mid HCG, Short LCG: only Mid-Short uses conversion gain."""
+    rng = np.random.default_rng(2)
+    height, width = 128, 128
+    black = 240.0
+    signal = rng.uniform(200, 1400, size=(height, width))
+    long_img = np.clip(np.round(black + signal), 0, 4095).astype(np.uint16)
+    mid_img = np.clip(np.round(black + signal / 2), 0, 4095).astype(np.uint16)
+    short_img = np.clip(np.round(black + signal / 2 / 2.9), 0, 4095).astype(np.uint16)
+    long_img[0:4, 0:4] = 4095
+    paths = [
+        _write_raw(tmp_path / "long", long_img),
+        _write_raw(tmp_path / "mid", mid_img),
+        _write_raw(tmp_path / "short", short_img),
+    ]
+    result = suggest.analyse(
+        paths,
+        black=240,
+        cg_modes=["hcg", "hcg", "lcg"],
+        exposures=[2.0, 1.0, 1.0],
+        cam_gain_db=[3.0, 3.0, 3.0],
+    )
+    lm, ms = result["pairs"]
+    assert lm["conversion_gain_ratio"] == 1
+    assert lm["gain_dB"] == pytest.approx(6.02, abs=0.5)
+    assert ms["gain_dB"] == pytest.approx(0.0, abs=0.01)
+    assert ms["conversion_gain_ratio"] == pytest.approx(2.9, rel=0.1)
+
+
+@pytest.mark.skipif(not DATA_HCG_LCG.exists(), reason="data/hcg-lcg missing")
+def test_data_hcg_lcg() -> None:
+    paths = [DATA_HCG_LCG / "hcg-3db.bin", DATA_HCG_LCG / "lcg-3db.bin"]
+    for p in paths:
+        assert p.is_file(), p
+    result = suggest.analyse(paths, cg_modes=["hcg", "lcg"], cam_gain_db=[3.0, 3.0])
+    pair = result["pairs"][0]
+    assert pair["gain_dB"] == pytest.approx(0.0, abs=0.01)
+    assert pair["conversion_gain_ratio"] == pytest.approx(2.90, abs=0.1)
+    assert pair["low"] == 3430
+    assert pair["high"] == 3730
+    without = suggest.analyse(paths)
+    assert without["pairs"][0]["conversion_gain_ratio"] == 1
+    assert without["pairs"][0]["gain_dB"] == pytest.approx(9.26, abs=0.2)

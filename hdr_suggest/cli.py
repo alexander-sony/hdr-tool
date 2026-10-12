@@ -48,6 +48,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="camera gain (dB) per frame in file order",
     )
     parser.add_argument("--json", type=Path, default=None, help="write JSON result")
+    parser.add_argument(
+        "--cg-mode",
+        nargs="+",
+        default=None,
+        dest="cg_mode",
+        metavar="MODE",
+        help=(
+            "per-frame conversion mode: hcg or lcg, same order as files. "
+            "A pair with different modes puts leftover ratio in Conversion "
+            "gain; matching modes keep conversion 1. Example: hcg lcg  or "
+            "hcg hcg lcg"
+        ),
+    )
     return parser
 
 
@@ -60,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--exposures count must match number of frames")
     if args.cam_gain_db is not None and len(args.cam_gain_db) != len(args.frames):
         parser.error("--cam-gain-db count must match number of frames")
+    if args.cg_mode is not None and len(args.cg_mode) != len(args.frames):
+        parser.error("--cg-mode count must match number of frames")
 
     try:
         result = suggest.analyse(
@@ -70,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
             window=args.window,
             exposures=args.exposures,
             cam_gain_db=args.cam_gain_db,
+            cg_modes=args.cg_mode,
         )
     except (LoadError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

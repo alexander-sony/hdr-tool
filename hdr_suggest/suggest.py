@@ -21,6 +21,7 @@ def analyse(
     window: int = 300,
     exposures: Optional[list[float]] = None,
     cam_gain_db: Optional[list[float]] = None,
+    cg_modes: Optional[list[str]] = None,
 ) -> dict:
     """Suggest viewer fields from frames ordered long (brightest) to short.
 
@@ -30,8 +31,10 @@ def analyse(
        for every frame. `.raw` with no OB is an error, not an assumed 240.
     3. For each adjacent pair, measure Long/Short from 2x2 cell means
        (`pair.pair_gain`): global median on mid-tones, seam median near clip
-       (that is the merge region). Composite dB is 20*log10(seam). Conversion
-       gain is always 1 (same sensor mode).
+       (that is the merge region). Same conversion mode (default, or matching
+       `--cg-mode`): composite dB is 20*log10(seam), conversion 1. Different
+       modes on a pair (hcg vs lcg): conversion is the measured ratio after
+       analog/exposure; dB is that remainder. 3F can mix: e.g. hcg hcg lcg.
     4. Thresholds sit just below clip so clipped Long pixels go to the shorter
        frame: High = floor((clip_eff-1-margin)/10)*10, Low = High-window.
        3F Mid-Short uses those values * Long-Mid ratio, rounded to 100
@@ -44,6 +47,7 @@ def analyse(
         raise ValueError("need at least 2 frames (long ... short)")
     if len(paths) > 3:
         raise ValueError("at most 3 frames supported")
+    modes = _normalize_cg_modes(cg_modes, len(paths))
 
     # --- load: active image + optional OB mean per file ---
     frames = [load.load_frame(p) for p in paths]
@@ -149,10 +153,29 @@ def analyse(
                 "(Long exposure too long / thresholds too low)"
             )
 
-        # Amplitude dB at the seam; conversion stays 1 so all ratio lives in dB.
-        gain_db = float(20 * np.log10(r_seam))
+        # Viewer G = 10^(dB/20) * conversion. Split per pair from --cg-mode.
         gain_db_global = float(20 * np.log10(r_glob))
-        _warn_nominal(name, gain_db, i, exposures, cam_gain_db, warnings)
+        mixed_cg = modes[i] != modes[i + 1]
+        r_known = _known_linear_ratio(i, exposures, cam_gain_db)
+        if mixed_cg:
+            if r_known <= 0:
+                raise ValueError(f"{name}: non-positive analog/exposure ratio")
+            conversion = r_seam / r_known
+            gain_db = float(20 * np.log10(r_known))
+            if modes[i] == "lcg" and modes[i + 1] == "hcg":
+                warnings.append(
+                    f"{name}: LCG listed as the longer frame vs HCG; "
+                    "HCG should be first (brighter for the same exposure)"
+                )
+            if exposures is None and cam_gain_db is None:
+                warnings.append(
+                    f"{name}: HCG vs LCG with no --exposures/--cam-gain-db; "
+                    "full ratio went to conversion (dB=0)"
+                )
+        else:
+            conversion = 1.0
+            gain_db = float(20 * np.log10(r_seam))
+            _warn_nominal(name, gain_db, i, exposures, cam_gain_db, warnings)
 
         if name == "long_mid":
             g_lm = r_seam
@@ -164,7 +187,7 @@ def analyse(
             "ratio_seam": round(r_seam, 3),
             "ratio_global": round(r_glob, 3),
             "blocks_used": n_blocks,
-            "conversion_gain_ratio": 1,
+            "conversion_gain_ratio": round(conversion, 3),
             "low": low,
             "high": high,
             "unit": unit,
@@ -191,6 +214,7 @@ def analyse(
         "pairs": pairs_out,
         "assumptions": assumptions,
         "warnings": warnings,
+        "cg_modes": modes,
     }
     if len(pairs_out) >= 2:
         result["chain_dB"] = round(
@@ -198,6 +222,48 @@ def analyse(
             2,
         )
     return result
+
+
+def _normalize_cg_modes(cg_modes: Optional[list[str]], n_frames: int) -> list[str]:
+    """Per-frame hcg/lcg. Omitted → all hcg (same mode, conversion 1)."""
+    aliases = {
+        "hcg": "hcg",
+        "hg": "hcg",
+        "high": "hcg",
+        "lcg": "lcg",
+        "lg": "lcg",
+        "low": "lcg",
+    }
+    if cg_modes is None:
+        return ["hcg"] * n_frames
+    if len(cg_modes) != n_frames:
+        raise ValueError(f"--cg-mode needs {n_frames} values (one per frame)")
+    out: list[str] = []
+    for raw in cg_modes:
+        key = raw.strip().lower()
+        if key not in aliases:
+            raise ValueError(f"unknown conversion mode {raw!r}; use hcg or lcg")
+        out.append(aliases[key])
+    return out
+
+
+def _known_linear_ratio(
+    pair_index: int,
+    exposures: Optional[list[float]],
+    cam_gain_db: Optional[list[float]],
+) -> float:
+    """Analog-gain and exposure ratio only (not conversion gain). Default 1."""
+    ratio = 1.0
+    if exposures is not None and pair_index + 1 < len(exposures):
+        t_long = exposures[pair_index]
+        t_short = exposures[pair_index + 1]
+        if t_short > 0 and t_long > 0:
+            ratio *= t_long / t_short
+    if cam_gain_db is not None and pair_index + 1 < len(cam_gain_db):
+        ratio *= float(
+            10 ** ((cam_gain_db[pair_index] - cam_gain_db[pair_index + 1]) / 20.0)
+        )
+    return ratio
 
 
 def _warn_order(

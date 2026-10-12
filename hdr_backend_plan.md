@@ -28,7 +28,7 @@ CHDR, per pixel, after black subtraction (`v = Long - black`):
 `G = 10^(gain_dB/20) × conversion_ratio` (the two fields multiply). Tone mapping is on the display path only.
 
 - One black field for every frame. Tone mapping is display-only (0 = linear, higher lifts darks); default 1.
-- Conversion gain is the HG/LG efficiency ratio. Same sensor mode → conversion = **1**; the whole exposure ratio goes into composite dB.
+- Conversion gain is the HG/LG efficiency ratio, **per pair**. `--cg-mode` is one of `hcg`/`lcg` per file. Matching modes on a pair → conversion = **1**, all ratio in dB. Different modes → conversion gets the measured ratio after analog/exposure, dB is that remainder. 3F can mix (`hcg hcg lcg` only the Mid–Short pair uses conversion).
 - Single-frame Long/Short views are unreliable (clip ~255 LSB, ignore tone/gain). Gain can only be judged at the seam.
 - 2F map colours: cyan = long, green = blend, red = short.
 - 3F Mid–Short thresholds are compared on the **Long-scale composite** (Mid × G_LM). Low/High = Long–Mid Low/High × G_LM, rounded to 100. Confirmed on the `data/3f` set (3430/3730 → 6800/7400).
@@ -43,6 +43,7 @@ hdr-suggest LONG.(bin|raw) [MID.(bin|raw)] SHORT.(bin|raw) [options]
   --window 300           Low = High - window
   --exposures a [b] c    optional nominal exposures (ms), same order as files
   --cam-gain-db a [b] c  optional camera gain per frame (dB)
+  --cg-mode hcg lcg      per-frame HCG/LCG (3F e.g. hcg hcg lcg)
   --json out.json        machine-readable result
 ```
 
@@ -74,8 +75,10 @@ for each adjacent pair (L,S):
   r_seam = median(C_L/C_S | ~K, C_L>30, C_S>5, 0.65*clip_eff < C_L < 0.97*clip_eff)
            # if >=2000 cells else r_glob
   level curve: 15 log bins from 30 to clip_eff; median ratio if bin has >=500 cells
-  gain_dB = 20*log10(r_seam)          # report to 0.01 dB
+  gain_dB = 20*log10(r_seam)          # default: all ratio in dB
   conversion_ratio = 1
+  pair modes differ: conversion = r_seam / (10^((gL-gS)/20) * tL/tS); gain_dB = remainder
+  pair modes match:  conversion = 1; gain_dB = 20*log10(r_seam)
   High   = floor((clip_eff - 1 - margin)/10)*10      # margin 120 -> 3730
   Low    = High - window                              # window 300
   Blend  = 0.5 ; Tone = 1

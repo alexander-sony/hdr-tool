@@ -36,7 +36,7 @@ def format_report(result: dict) -> str:
             f"(seam ratio {p['ratio_seam']:.3f} from {p['blocks_used']} cells; "
             f"global {p['gain_dB_global']:.2f} dB / {p['ratio_global']:.3f}). "
             f"Conversion gain = {p['conversion_gain_ratio']} "
-            f"(same sensor mode; all ratio in dB). "
+            f"{'(HCG/LCG split)' if p['conversion_gain_ratio'] != 1 else '(same conversion mode; all ratio in dB)'}. "
             f"Short noise in Long units ~ {p['short_noise_in_long_LSB']} LSB."
         )
     if "chain_dB" in result:

@@ -9,7 +9,7 @@ uv run hdr-suggest LONG.raw MID.raw SHORT.raw --black 240
 
 - Spec and algorithm: [`hdr_backend_plan.md`](hdr_backend_plan.md). Package: `hdr_suggest`.
 - `.bin` black comes from optical-black rows. `.raw` has no OB: `--black` is required unless a `.bin` is in the same run. Never guess black from image content.
-- Do not auto-sort frames. Conversion gain is 1. Typed exposures are not the gain (`--exposures` / `--cam-gain-db` are optional warnings only).
+- Do not auto-sort frames. Conversion gain is 1 on pairs with the same `--cg-mode`. A pair that is `hcg` vs `lcg` puts leftover ratio in conversion gain. Typed exposures are not the gain unless that pair is mixed (`--exposures` / `--cam-gain-db` then set the dB remainder).
 - 3F Mid–Short low/high are Long-scale: Long–Mid thresholds × Long–Mid gain, rounded to 100 (3430/3730 → 6800/7400 on `data/3f`).
 - Example set: `data/3f/` (`long-13p2-9db.bin`, `mid-6p6-9db.bin`, `short-3p3-9db.bin`). For 2F, pass long + short only (skip mid). Viewer screenshots of that 3F run: `data/3f/viewer/hdr-3f.png`, `data/3f/viewer/map-3f.png`.
 
