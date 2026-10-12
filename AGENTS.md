@@ -1,3 +1,18 @@
+# HDR parameter suggestion (`hdr-suggest`)
+
+CLI that reads 2 or 3 IMX900 `.bin` or `.raw` frames (long brightest first, then short) and prints suggested CHDR viewer settings: black level, composite gain (dB), conversion gain, low/high thresholds, blend, tone. Each section cites a measured number.
+
+```
+uv run hdr-suggest LONG.bin [MID.bin] SHORT.bin
+uv run hdr-suggest LONG.raw MID.raw SHORT.raw --black 240
+```
+
+- Spec and algorithm: [`hdr_backend_plan.md`](hdr_backend_plan.md). Package: `hdr_suggest`.
+- `.bin` black comes from optical-black rows. `.raw` has no OB: `--black` is required unless a `.bin` is in the same run. Never guess black from image content.
+- Do not auto-sort frames. Conversion gain is 1. Typed exposures are not the gain (`--exposures` / `--cam-gain-db` are optional warnings only).
+- 3F Mid–Short low/high are Long-scale: Long–Mid thresholds × Long–Mid gain, rounded to 100 (3430/3730 → 6800/7400 on `data/3f`).
+- Example set: `data/3f/` (`long-13p2-9db.bin`, `mid-6p6-9db.bin`, `short-3p3-9db.bin`).
+
 # Preview images
 
 Viewable PNGs of unpacked raw frames. Demosaic and white balance only. Linear 8-bit (no gamma). Do not auto-stretch or otherwise enhance contrast: a common 12-bit white point keeps exposure/gain differences visible.

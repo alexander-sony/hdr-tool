@@ -1,8 +1,23 @@
 [project]
 name = "hdr-tool"
 version = "0.1.0"
-description = "HDR test-image generator for IMX900-style raw frames"
+description = "HDR parameter suggestion and test-image tools for IMX900-style raw frames"
 requires-python = ">=3.14"
 dependencies = [
+    "numpy>=2.5.4",
     "pillow>=12.3.0",
+]
+scripts = { hdr-suggest = "hdr_suggest.cli:main" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hdr_suggest"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
 ]
