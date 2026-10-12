@@ -1,6 +1,6 @@
 # Preview images
 
-Viewable PNGs of unpacked raw frames. These are display previews, not a linear record of exposure.
+Viewable PNGs of unpacked raw frames. Demosaic and white balance only. Linear 8-bit (no gamma). Do not auto-stretch or otherwise enhance contrast: a common 12-bit white point keeps exposure/gain differences visible.
 
 ## Source
 
@@ -18,8 +18,8 @@ Headerless uint16 little-endian, row-major. Read width, height, bit depth, and B
 1. Subtract black level 240 and clip at 0.
 2. Bilinear-demosaic the Bayer pattern.
 3. Gray-world white balance.
-4. Stretch so the 99.5th percentile is white. Stretch each frame on its own.
-5. Apply gamma 2.2 and write 8-bit RGB.
+4. Scale by the 12-bit white point (4095 − 240). Same scale for every frame. Do not percentile-stretch or auto-contrast.
+5. Write linear 8-bit RGB. Do not apply gamma.
 
 ## Output
 
