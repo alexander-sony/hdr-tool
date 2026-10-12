@@ -28,9 +28,9 @@ CHDR, per pixel, after black subtraction (`v = Long - black`):
 `G = 10^(gain_dB/20) × conversion_ratio` (the two fields multiply). Tone mapping is on the display path only.
 
 - One black field for every frame. Tone mapping is display-only (0 = linear, higher lifts darks); default 1.
-- Conversion gain is the HG/LG efficiency ratio (slide example 2.6×). Same sensor mode → conversion = **1**; the whole exposure ratio goes into composite dB.
+- Conversion gain is the HG/LG efficiency ratio. Same sensor mode → conversion = **1**; the whole exposure ratio goes into composite dB.
 - Single-frame Long/Short views are unreliable (clip ~255 LSB, ignore tone/gain). Gain can only be judged at the seam.
-- 2F map colours (from the tool slides): cyan = long, green = blend, red = short.
+- 2F map colours: cyan = long, green = blend, red = short.
 - 3F Mid–Short thresholds are compared on the **Long-scale composite** (Mid × G_LM). Low/High = Long–Mid Low/High × G_LM, rounded to 100. Confirmed on the `data/3f` set (3430/3730 → 6800/7400).
 
 ## 2. CLI
@@ -140,14 +140,3 @@ uv run hdr-suggest data/3f/long-13p2-9db.bin data/3f/short-3p3-9db.bin \
 Acceptance: one pair, composite gain ~11.95 dB (±0.15), low/high 3430/3730, Long clips (~7%), Short used in highlights.
 
 Viewer check of this 3F set (screenshots, not decoded by tests): [`data/3f/viewer/hdr-3f.png`](data/3f/viewer/hdr-3f.png) and [`data/3f/viewer/map-3f.png`](data/3f/viewer/map-3f.png). Composite uses black 240, gains 5.96/1 and 5.97/1, thresholds 3430/3730 and 6800/7400, blend 0.5/0.5, tone 0 (linearity). Map uses the same idea with gains rounded to 6 and Long–Mid thresholds 3400/3700, tone 1. On that map, red is Long (most of the frame), purple is Mid (brighter chart patches), cyan is Short (the two white patches), and orange/yellow rims are the blend zones.
-
-## 8. Older verification vectors (camera gain 0 dB)
-
-| pair (long / short) | ratio seam | dB seam | dB global |
-|---|---|---|---|
-| Mid10 / Short1.2 | 6.86 | 16.7 | 17.0 (7.09) |
-| Long20 / Mid10 | - | 6.3 | 6.4 (×2.08) |
-| Mid10 / Short1 | - | 19.9 | 20.1 (×10.1) |
-| Short5 / Short1 | 5.06 | 14.1 | 15.0 (×5.48; warn level-dependent) |
-
-Viewer settings that worked on a 2F set: Black 240, Gain 16.9, Conversion 1, Low 3000, High 3500, Blend 0.5, Tone 1. Pink/odd colours on clipped white card disappear when High ≤ 3854.
