@@ -38,7 +38,7 @@ Viewer screenshots of the 3F settings: [`../data/3f/viewer/hdr-3f.png`](../data/
 uv run hdr-suggest data/hcg-lcg/hcg-3db.bin data/hcg-lcg/lcg-3db.bin --cg-mode hcg lcg --cam-gain-db 3 3
 ```
 
-Typical suggestion: composite gain 0 dB, conversion ~2.90, thresholds 3430/3730. Without `--cg-mode` the same pair is reported as ~9.26 dB × conversion 1 (same total G, wrong boxes).
+Typical suggestion: composite gain 0 dB, conversion ~2.90, thresholds 3430/3730. Without `--cg-mode` the same pair is reported as ~9.26 dB × conversion 1 (same total G, wrong boxes). Viewer: [`../data/hcg-lcg/viewer/hdr.png`](../data/hcg-lcg/viewer/hdr.png) (0 dB × 2.9), [`../data/hcg-lcg/viewer/map.png`](../data/hcg-lcg/viewer/map.png) (cyan=HCG, red=LCG on the white patch).
 
 **3F mixed modes** — only the pair that actually switches HCG↔LCG uses conversion gain, e.g. long and mid HCG, short LCG:
 ```
