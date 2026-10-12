@@ -105,6 +105,9 @@ NEVER use mean(all pixels) ratio, and NEVER compute dB from typed exposures. Opt
 
 ## 7. Worked example (`data/3f`)
 
+All sample frames live in `data/3f/`. There is no separate 2F capture set; for CHDR(2F) pass long + short only.
+
+**3F**
 ```
 uv run hdr-suggest data/3f/long-13p2-9db.bin data/3f/mid-6p6-9db.bin data/3f/short-3p3-9db.bin \
   --exposures 13.2 6.6 3.3 --cam-gain-db 9 9 9
@@ -117,6 +120,14 @@ Acceptance (12-bit, black ~240, clip_eff ~3855):
 - Blend 0.5, tone 1, per-pair long/blend/short area %.
 - OB means ~238.9 / 239.9 / 240.5 → spread warning; suggested black = mean rounded to 0.1.
 - Chained long→short dB = sum of the two pair dB values.
+
+**2F (same folder, skip mid)**
+```
+uv run hdr-suggest data/3f/long-13p2-9db.bin data/3f/short-3p3-9db.bin \
+  --exposures 13.2 3.3 --cam-gain-db 9 9
+```
+
+Acceptance: one pair, composite gain ~11.95 dB (±0.15), low/high 3430/3730, Long clips (~7%), Short used in highlights.
 
 ## 8. Older verification vectors (camera gain 0 dB)
 

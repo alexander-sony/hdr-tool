@@ -159,3 +159,25 @@ def test_data_3f_bins() -> None:
         "Picture select",
     ):
         assert section in text
+
+
+@pytest.mark.skipif(not DATA_3F.exists(), reason="data/3f missing")
+def test_data_3f_long_short_as_2f() -> None:
+    """2F path: long + short from the 3F set (no separate data/2f)."""
+    paths = [
+        DATA_3F / "long-13p2-9db.bin",
+        DATA_3F / "short-3p3-9db.bin",
+    ]
+    result = suggest.analyse(
+        paths,
+        exposures=[13.2, 3.3],
+        cam_gain_db=[9.0, 9.0],
+    )
+    assert len(result["pairs"]) == 1
+    pair = result["pairs"][0]
+    assert pair["name"] == "long_short"
+    assert pair["gain_dB"] == pytest.approx(11.95, abs=0.15)
+    assert pair["low"] == 3430
+    assert pair["high"] == 3730
+    assert pair["long_clipped_pct"] > 1.0
+    assert not any("Short adds nothing" in w for w in result["warnings"])
