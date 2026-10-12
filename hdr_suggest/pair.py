@@ -15,7 +15,14 @@ def pair_gain(
     black: float,
     clip: float,
 ) -> tuple[float, float, list[tuple[float, float, float, int]], int]:
-    """Return (r_glob, r_seam, level_curve, blocks_used)."""
+    """Estimate Long/Short from 2x2 Bayer cell means.
+
+    Clipped cells are dropped. r_glob is the median ratio on mid-tones
+    (30 < C_long < 0.8*clip_eff). r_seam is the same median near clip
+    (0.65–0.97 of clip_eff), where the merge actually happens; falls back
+    to r_glob if fewer than 2000 cells. The level curve is 15 log bins for
+    the linearity warning in analyse().
+    """
     clip_eff = clip - black
     cl = load.blocks(long_img - black)
     cs = load.blocks(short_img - black)
