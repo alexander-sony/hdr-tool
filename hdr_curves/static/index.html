@@ -41,20 +41,11 @@
               Map
             </label>
             <label>
-              <input type="radio" name="synth-view" value="grey" />
-              Grey
+              <input type="radio" name="synth-view" value="hdr" />
+              HDR
             </label>
           </div>
-          <div class="synth-stack">
-            <canvas id="plot-map" width="640" height="200"></canvas>
-            <div class="seam-block">
-              <p class="seam-label">Seam zoom — blend window with Bayer + noise</p>
-              <canvas id="plot-seam" width="640" height="160"></canvas>
-              <p id="seam-caption" class="seam-caption">
-                Green is the blend window; cyan/red dots crossed Low/High from Bayer and noise.
-              </p>
-            </div>
-          </div>
+          <canvas id="plot-map" width="640" height="360"></canvas>
         </figure>
       </section>
 

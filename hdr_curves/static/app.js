@@ -117,9 +117,9 @@ function gaussianNoise(rand, sigma) {
   return sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 }
 
-const SEAM_W = 64;
-const SEAM_H = 48;
 const SEAM_SEED = 0x5ead201;
+const HDR_ACCENT_LONG = [0.0, 0.835, 0.835];
+const HDR_ACCENT_SHORT = [0.941, 0.227, 0.227];
 
 // --- DOM ---
 
@@ -167,8 +167,6 @@ const els = {
   plotThresh: document.getElementById("plot-thresh"),
   plotTone: document.getElementById("plot-tone"),
   plotMap: document.getElementById("plot-map"),
-  plotSeam: document.getElementById("plot-seam"),
-  seamCaption: document.getElementById("seam-caption"),
   synthView: document.querySelectorAll('input[name="synth-view"]'),
   capGain: document.querySelector("#plot-gain")?.closest("figure")?.querySelector("figcaption"),
   capThresh: document.querySelector("#plot-thresh")?.closest("figure")?.querySelector("figcaption"),
@@ -287,26 +285,13 @@ function setOutputs(state) {
       : "2. Threshold stitch — cyan long, green blend, red short";
   }
   if (els.capMap) {
-    if (state.mapView === "grey") {
+    if (state.mapView === "hdr") {
       els.capMap.textContent =
-        "4. Synthetic grey + seam zoom — stitched + tone (not a real frame)";
+        "4. Synthetic HDR — blend patches show Long/Short speckles (not a real frame)";
     } else {
       els.capMap.textContent = state.is3f
-        ? "4. Synthetic Map + seam zoom — 3F regions (not a real frame)"
-        : "4. Synthetic Map + seam zoom — Low/High (not a real frame)";
-    }
-  }
-  if (els.seamCaption) {
-    if (state.mapView === "grey") {
-      els.seamCaption.textContent = state.matchRatio
-        ? "Grey stitch of the same pixels. Uncheck “Short matches this gain” to see mottling from gain error."
-        : "Grey stitch with mismatched G vs true ratio — mottling in the blend band.";
-    } else if (state.is3f) {
-      els.seamCaption.textContent =
-        "Yellow is the Long–Mid blend window; other colours crossed a threshold from Bayer and noise.";
-    } else {
-      els.seamCaption.textContent =
-        "Green is the blend window; cyan/red dots crossed Low/High from Bayer and noise. Tighten Low/High or raise seam noise to see more speckles.";
+        ? "4. Synthetic Map — blend patches show region speckles (not a real frame)"
+        : "4. Synthetic Map — blend patches show Low/High speckles (not a real frame)";
     }
   }
 
@@ -322,6 +307,9 @@ function setOutputs(state) {
   if (!state.is3f && seamMatch) {
     notes.push("Matched gain: blend does not move the stitched curve.");
   }
+  notes.push(
+    "Speckles sit on the blend-window patch (Bayer + seam noise). At noise 0 only Bayer remains; raise noise or tighten Low/High to see Map cyan/red flips.",
+  );
   if (state.high > state.clipEff) {
     notes.push(
       state.is3f
@@ -841,11 +829,53 @@ function compositeAt(state, lum) {
   return composite(c1, shortG, state.low2, state.high2, 1 - state.blend2);
 }
 
-function colorOf(state, lum) {
-  if (state.mapView === "grey") {
-    const peak = Math.max(state.clipEff * (state.is3f ? state.g * state.g2 : state.g), 1);
-    const g = Math.round(tone8bit(compositeAt(state, lum), peak, state.tone));
-    return `rgb(${g},${g},${g})`;
+/** Chart-like RGB unit hues for the eight synthetic patches (and field). */
+const PATCH_HUES = [
+  [0.55, 0.58, 0.62],
+  [0.92, 0.42, 0.22],
+  [0.22, 0.55, 0.88],
+  [0.88, 0.78, 0.2],
+  [0.2, 0.72, 0.48],
+  [0.78, 0.28, 0.55],
+  [0.95, 0.95, 0.92],
+  [0.35, 0.28, 0.22],
+];
+
+function rgbCss(r, g, b) {
+  return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+}
+
+function scaleHue(hue, luma8) {
+  const t = Math.min(Math.max(luma8, 0), 255) / 255;
+  return [
+    hue[0] * 255 * t,
+    hue[1] * 255 * t,
+    hue[2] * 255 * t,
+  ];
+}
+
+function mixRgb(a, b, t) {
+  const u = Math.min(Math.max(t, 0), 1);
+  return [
+    a[0] * (1 - u) + b[0] * u,
+    a[1] * (1 - u) + b[1] * u,
+    a[2] * (1 - u) + b[2] * u,
+  ];
+}
+
+function peakOf(state) {
+  return Math.max(state.clipEff * (state.is3f ? state.g * state.g2 : state.g), 1);
+}
+
+function tonedLuma(state, lum) {
+  return tone8bit(compositeAt(state, lum), peakOf(state), state.tone);
+}
+
+function colorOf(state, lum, patchIndex) {
+  if (state.mapView === "hdr") {
+    const hue = PATCH_HUES[(patchIndex ?? 0) % PATCH_HUES.length];
+    const rgb = scaleHue(hue, tonedLuma(state, lum));
+    return rgbCss(rgb[0], rgb[1], rgb[2]);
   }
   const longCode = Math.min(lum, state.clipEff);
   if (!state.is3f) {
@@ -855,6 +885,113 @@ function colorOf(state, lum) {
   return MAP_FILL_3F[
     region3f(longCode, midG, state.low, state.high, state.low2, state.high2)
   ];
+}
+
+function patchInBlendWindow(state, v) {
+  const longCode = Math.min(v, state.clipEff);
+  if (!state.is3f) {
+    return longCode >= state.low && longCode < state.high;
+  }
+  if (longCode >= state.low && longCode < state.high) return true;
+  if (longCode >= state.high) {
+    const midG = Math.min(v / state.trueRatio, state.clipEff) * state.g;
+    return midG >= state.low2 && midG < state.high2;
+  }
+  return false;
+}
+
+function blendWindowForPatch(state, v) {
+  const longCode = Math.min(v, state.clipEff);
+  if (!state.is3f) {
+    return { low: state.low, high: state.high, stage: "2f" };
+  }
+  if (longCode >= state.low && longCode < state.high) {
+    return { low: state.low, high: state.high, stage: "lm" };
+  }
+  return { low: state.low2, high: state.high2, stage: "ms" };
+}
+
+function drawSpeckledPatch(ctx, state, mean, patchIndex, x, y, cellW, cellH) {
+  const scale = bitScale(state.bits);
+  const rand = mulberry32(SEAM_SEED + patchIndex * 9973);
+  // Coarse enough that Map cyan/red dots read as speckles, not a flat green field.
+  const cols = Math.max(12, Math.round(cellW / 4));
+  const rows = Math.max(10, Math.round(cellH / 4));
+  const pxW = cellW / cols;
+  const pxH = cellH / rows;
+  const win = blendWindowForPatch(state, mean);
+  const sigma = Math.max(state.noise, 0);
+  const baseHue = PATCH_HUES[patchIndex % PATCH_HUES.length];
+  const baseRgb = scaleHue(baseHue, tonedLuma(state, mean));
+  const accentLong = scaleHue(HDR_ACCENT_LONG, tonedLuma(state, mean));
+  const accentShort = scaleHue(HDR_ACCENT_SHORT, tonedLuma(state, mean));
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const bayer = bayerOffsetAt(r, c, scale);
+      const sceneLong = mean + bayer + gaussianNoise(rand, sigma);
+      const sceneShort = mean + bayer + gaussianNoise(rand, sigma);
+      const longCode = Math.min(Math.max(sceneLong, 0), state.clipEff);
+      let fill;
+      if (state.mapView === "hdr") {
+        let shorterG;
+        if (win.stage === "ms") {
+          shorterG =
+            Math.min(
+              Math.max(sceneShort, 0) / (state.trueRatio * state.trueRatio2),
+              state.clipEff,
+            ) *
+            state.g *
+            state.g2;
+        } else {
+          shorterG =
+            Math.min(Math.max(sceneShort, 0) / state.trueRatio, state.clipEff) *
+            state.g;
+        }
+        let rgb;
+        if (longCode < win.low) {
+          rgb = mixRgb(baseRgb, accentLong, 0.9);
+        } else if (longCode >= win.high) {
+          rgb = mixRgb(baseRgb, accentShort, 0.9);
+        } else if (sigma > 0) {
+          const delta = (longCode - shorterG) / sigma;
+          const t = Math.min(Math.abs(delta) * 0.4, 0.8);
+          rgb = mixRgb(
+            baseRgb,
+            delta >= 0 ? accentLong : accentShort,
+            t,
+          );
+        } else {
+          rgb = baseRgb;
+        }
+        fill = rgbCss(rgb[0], rgb[1], rgb[2]);
+      } else if (state.is3f) {
+        const midG =
+          Math.min(Math.max(sceneShort, 0) / state.trueRatio, state.clipEff) *
+          state.g;
+        fill =
+          MAP_FILL_3F[
+            region3f(
+              longCode,
+              midG,
+              state.low,
+              state.high,
+              state.low2,
+              state.high2,
+            )
+          ];
+      } else {
+        fill = MAP_FILL_2F[region2f(longCode, win.low, win.high)];
+      }
+      ctx.fillStyle = fill;
+      ctx.fillRect(
+        x + Math.floor(c * pxW),
+        y + Math.floor(r * pxH),
+        Math.ceil(pxW) + 1,
+        Math.ceil(pxH) + 1,
+      );
+    }
+  }
 }
 
 function drawMap(state) {
@@ -869,7 +1006,7 @@ function drawMap(state) {
   const innerH = h - pad.t - pad.b;
   const values = patchValues(state);
   const fieldLum = values[0];
-  ctx.fillStyle = colorOf(state, fieldLum);
+  ctx.fillStyle = colorOf(state, fieldLum, 0);
   ctx.fillRect(pad.l, pad.t, innerW, innerH);
 
   const cols = 4;
@@ -886,103 +1023,22 @@ function drawMap(state) {
     const row = Math.floor(i / cols);
     const x = pad.l + gap + col * (cellW + gap);
     const y = pad.t + gap + row * (cellH + gap);
-    ctx.fillStyle = colorOf(state, v);
-    ctx.fillRect(x, y, cellW, cellH);
+    if (patchInBlendWindow(state, v)) {
+      drawSpeckledPatch(ctx, state, v, i, x, y, cellW, cellH);
+    } else {
+      ctx.fillStyle = colorOf(state, v, i);
+      ctx.fillRect(x, y, cellW, cellH);
+    }
     ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
     let ink = "#111";
-    if (state.mapView === "grey") {
-      const peak = Math.max(
-        state.clipEff * (state.is3f ? state.g * state.g2 : state.g),
-        1,
-      );
-      const g = tone8bit(compositeAt(state, v), peak, state.tone);
+    if (state.mapView === "hdr") {
+      const g = tonedLuma(state, v);
       ink = g < 140 ? "#eee" : "#111";
     }
     ctx.fillStyle = ink;
     ctx.fillText(String(Math.round(v)), x + cellW / 2, y + cellH / 2);
   });
-}
-
-function seamMean(state) {
-  return (state.low + state.high) / 2;
-}
-
-function drawSeamZoom(state) {
-  const canvas = els.plotSeam;
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
-
-  const mean = seamMean(state);
-  const scale = bitScale(state.bits);
-  const rand = mulberry32(SEAM_SEED);
-  const peak = Math.max(
-    state.clipEff * (state.is3f ? state.g * state.g2 : state.g),
-    1,
-  );
-  const cellW = w / SEAM_W;
-  const cellH = h / SEAM_H;
-
-  for (let r = 0; r < SEAM_H; r++) {
-    for (let c = 0; c < SEAM_W; c++) {
-      const scene = mean + bayerOffsetAt(r, c, scale) + gaussianNoise(rand, state.noise);
-      const longCode = Math.min(Math.max(scene, 0), state.clipEff);
-      let fill;
-      if (state.mapView === "grey") {
-        const midG = Math.min(scene / state.trueRatio, state.clipEff) * state.g;
-        let stitched;
-        if (state.is3f) {
-          const shortG =
-            Math.min(scene / (state.trueRatio * state.trueRatio2), state.clipEff) *
-            state.g *
-            state.g2;
-          const c1 = composite(
-            longCode,
-            midG,
-            state.low,
-            state.high,
-            1 - state.blend,
-          );
-          stitched = composite(
-            c1,
-            shortG,
-            state.low2,
-            state.high2,
-            1 - state.blend2,
-          );
-        } else {
-          stitched = composite(longCode, midG, state.low, state.high, state.blend);
-        }
-        const g = Math.round(tone8bit(stitched, peak, state.tone));
-        fill = `rgb(${g},${g},${g})`;
-      } else if (state.is3f) {
-        const midG = Math.min(scene / state.trueRatio, state.clipEff) * state.g;
-        fill =
-          MAP_FILL_3F[
-            region3f(
-              longCode,
-              midG,
-              state.low,
-              state.high,
-              state.low2,
-              state.high2,
-            )
-          ];
-      } else {
-        fill = MAP_FILL_2F[region2f(longCode, state.low, state.high)];
-      }
-      ctx.fillStyle = fill;
-      ctx.fillRect(
-        Math.floor(c * cellW),
-        Math.floor(r * cellH),
-        Math.ceil(cellW) + 1,
-        Math.ceil(cellH) + 1,
-      );
-    }
-  }
 }
 
 function redraw() {
@@ -993,7 +1049,6 @@ function redraw() {
   drawThreshPlot(state, samples);
   drawTonePlot(state, samples);
   drawMap(state);
-  drawSeamZoom(state);
 }
 
 function loadSuggestJson(file) {

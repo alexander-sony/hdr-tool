@@ -211,55 +211,8 @@ figure:has(.view-switch) figcaption {
   right: 7.5rem;
 }
 
-.synth-figure {
-  display: flex;
-  flex-direction: column;
-}
-
-.synth-stack {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding-top: 1.55rem;
-}
-
-.synth-stack > canvas {
-  flex: 1 1 55%;
-  min-height: 0;
-  width: 100%;
-  height: auto;
-}
-
-.seam-block {
-  flex: 1 1 45%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--border);
-  padding: 0.2rem 0.35rem 0.25rem;
-}
-
-.seam-label {
-  margin: 0 0 0.1rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.seam-block canvas {
-  flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
-  height: auto;
+.synth-figure > canvas {
   image-rendering: pixelated;
-}
-
-.seam-caption {
-  margin: 0.15rem 0 0;
-  font-size: 0.68rem;
-  color: var(--muted);
-  line-height: 1.25;
 }
 
 .view-switch {
