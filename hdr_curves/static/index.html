@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HDR curve explorer</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HDR curve explorer</h1>
+      <p class="lede">
+        How gain, thresholds, blend, and tone move the CHDR curves.
+        Tone is a labeled shadow-lift illustration, not Sony&rsquo;s mapper.
+      </p>
+    </header>
+
+    <div class="layout">
+      <section class="plots" aria-label="Curves">
+        <figure>
+          <figcaption>1. Composite gain — long vs short×G</figcaption>
+          <svg id="plot-gain" viewBox="0 0 640 360" role="img"></svg>
+        </figure>
+        <figure>
+          <figcaption>2. Threshold stitch — cyan long, green blend, red short</figcaption>
+          <svg id="plot-thresh" viewBox="0 0 640 360" role="img"></svg>
+        </figure>
+        <figure>
+          <figcaption>
+            3. Tone mapping (8-bit) — illustration of the display path
+          </figcaption>
+          <svg id="plot-tone" viewBox="0 0 640 360" role="img"></svg>
+        </figure>
+        <figure class="synth-figure">
+          <figcaption>
+            4. Synthetic Map — long-code patches vs Low/High (not a real frame)
+          </figcaption>
+          <div class="view-switch" role="group" aria-label="Synthetic image view">
+            <label>
+              <input type="radio" name="synth-view" value="map" checked />
+              Map
+            </label>
+            <label>
+              <input type="radio" name="synth-view" value="hdr" />
+              HDR
+            </label>
+          </div>
+          <canvas id="plot-map" width="640" height="360"></canvas>
+        </figure>
+      </section>
+
+      <section class="controls" aria-label="Parameters">
+        <div class="presets">
+          <label for="frames">
+            Frames
+            <select id="frames">
+              <option value="2">2F</option>
+              <option value="3">3F</option>
+            </select>
+          </label>
+          <label for="preset">
+            Preset
+            <select id="preset">
+              <option value="3f2f">2F data/3f (11.95 dB)</option>
+              <option value="3f">3F data/3f (5.96 + 5.97 dB)</option>
+              <option value="hcg-lcg">HCG/LCG (0 dB × 2.9)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <label class="file-label">
+            Load hdr-suggest JSON
+            <input type="file" id="json-file" accept="application/json,.json" />
+          </label>
+        </div>
+
+        <div class="grid">
+          <label>
+            <span>Black [LSB]</span>
+            <input type="number" id="black" min="0" max="1023" step="0.1" />
+          </label>
+          <label>
+            <span>ADC bits</span>
+            <input type="number" id="bits" min="8" max="16" step="1" />
+          </label>
+          <p class="pair-title" id="pair1-title">Long–Short (HG)</p>
+          <label>
+            <span>Gain [dB] <output id="gain-db-out" for="gain-db"></output></span>
+            <input type="range" id="gain-db" min="0" max="40" step="0.01" />
+          </label>
+          <label>
+            <span
+              >Conversion [×]
+              <output id="conversion-out" for="conversion"></output
+            ></span>
+            <input type="range" id="conversion" min="1" max="4" step="0.01" />
+          </label>
+          <label class="checkbox" id="match-ratio-label">
+            <input type="checkbox" id="match-ratio" checked />
+            Short matches this gain (R = G)
+          </label>
+          <label id="true-ratio-wrap" class="hidden">
+            <span>True ratio R <output id="true-ratio-out" for="true-ratio"></output></span>
+            <input type="range" id="true-ratio" min="1" max="500" step="0.01" />
+          </label>
+          <label>
+            <span>Low threshold [LSB] <output id="low-out" for="low"></output></span>
+            <input type="range" id="low" min="0" max="8000" step="10" />
+          </label>
+          <label>
+            <span>High threshold [LSB] <output id="high-out" for="high"></output></span>
+            <input type="range" id="high" min="0" max="8000" step="10" />
+          </label>
+          <label>
+            <span><span id="blend1-title">Blend α</span> <output id="blend-out" for="blend"></output></span>
+            <input type="range" id="blend" min="0" max="1" step="0.01" />
+          </label>
+          <div id="pair2" class="hidden">
+            <p class="pair-title">Mid–Short (SLG–LG, Long-scale)</p>
+            <label>
+              <span>Gain [dB] <output id="gain-db2-out" for="gain-db2"></output></span>
+              <input type="range" id="gain-db2" min="0" max="40" step="0.01" />
+            </label>
+            <label>
+              <span
+                >Conversion [×]
+                <output id="conversion2-out" for="conversion2"></output
+              ></span>
+              <input type="range" id="conversion2" min="1" max="4" step="0.01" />
+            </label>
+            <label>
+              <span>Low threshold [LSB] <output id="low2-out" for="low2"></output></span>
+              <input type="range" id="low2" min="0" max="16000" step="10" />
+            </label>
+            <label>
+              <span>High threshold [LSB] <output id="high2-out" for="high2"></output></span>
+              <input type="range" id="high2" min="0" max="16000" step="10" />
+            </label>
+            <label>
+              <span>Blend α (Short–Mid) <output id="blend2-out" for="blend2"></output></span>
+              <input type="range" id="blend2" min="0" max="1" step="0.01" />
+            </label>
+          </div>
+          <label>
+            <span>Tone <output id="tone-out" for="tone"></output></span>
+            <input type="range" id="tone" min="0" max="4" step="1" />
+          </label>
+          <label>
+            <span
+              >Blend noise [LSB]
+              <output id="noise-out" for="noise"></output
+            ></span>
+            <input type="range" id="noise" min="0" max="100" step="0.1" />
+          </label>
+        </div>
+
+        <p id="readout" class="readout" aria-live="polite"></p>
+        <p id="notes" class="notes" aria-live="polite"></p>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
