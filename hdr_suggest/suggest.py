@@ -12,13 +12,26 @@ from hdr_suggest import load, pair
 PAIR_NAMES_2 = ("long_short",)
 PAIR_NAMES_3 = ("long_mid", "mid_short")
 
+# 12-bit LSB. Multiplied by 2^(bits-12) when the caller omits margin/window.
+_MARGIN_12 = 120.0
+_WINDOW_12 = 300
+_HIGH_STEP_12 = 10
+_MS_STEP_12 = 100
+_NOISE_12 = 2.6
+_SHORT_AT_SWITCH_12 = 30.0
+
+
+def _scaled_count(code_12: int, scale: float) -> int:
+    """Nearest native LSB for a 12-bit count, at least 1."""
+    return max(1, round(code_12 * scale))
+
 
 def analyse(
     paths: list[Path],
     black: Optional[float] = None,
     bits: int = 12,
-    margin: float = 120,
-    window: int = 300,
+    margin: Optional[float] = None,
+    window: Optional[int] = None,
     exposures: Optional[list[float]] = None,
     cam_gain_db: Optional[list[float]] = None,
     cg_modes: Optional[list[str]] = None,
@@ -36,9 +49,11 @@ def analyse(
        modes on a pair (hcg vs lcg): conversion is the measured ratio after
        analog/exposure; dB is that remainder. 3F can mix: e.g. hcg hcg lcg.
     4. Thresholds sit just below clip so clipped Long pixels go to the shorter
-       frame: High = floor((clip_eff-1-margin)/10)*10, Low = High-window.
-       3F Mid-Short uses those values * Long-Mid ratio, rounded to 100
-       (Long-scale composite).
+       frame. Omitted margin/window are the 12-bit values 120 and 300, scaled
+       by 2^(bits-12); an explicit margin or window is already native LSB.
+       High = floor((clip_eff-1-margin)/step)*step, Low = High-window.
+       3F Mid-Short uses those values * Long-Mid ratio, rounded to a step of
+       100 at 12-bit (also scaled). Long-scale composite.
     5. Blend 0.5 and tone 1 are fixed. Area % is how many pixels fall in
        long / blend / short under those thresholds.
     6. Warnings are non-fatal (OB spread, no clip, level-dependent gain, …).
@@ -76,6 +91,11 @@ def analyse(
 
     black = float(black)
     clip_eff = clip - black
+    scale = float(2 ** (bits - 12))
+    margin_lsb = _MARGIN_12 * scale if margin is None else float(margin)
+    window_lsb = _scaled_count(_WINDOW_12, scale) if window is None else int(window)
+    high_step = _scaled_count(_HIGH_STEP_12, scale)
+    ms_step = _scaled_count(_MS_STEP_12, scale)
     _warn_order(frames, black, warnings)
 
     pair_names = PAIR_NAMES_3 if len(frames) == 3 else PAIR_NAMES_2
@@ -88,7 +108,7 @@ def analyse(
 
         # --- gain: median Long/Short on 2x2 cells (clipped cells dropped) ---
         r_glob, r_seam, curve, n_blocks = pair.pair_gain(
-            long_img, short_img, black, clip
+            long_img, short_img, black, clip, scale
         )
         n_clip = int((long_img >= clip).sum())
         if n_clip == 0:
@@ -111,8 +131,8 @@ def analyse(
             )
 
         # --- thresholds: just below clip; narrow window so blend stays small ---
-        high_mid = int((clip_eff - 1 - margin) // 10 * 10)
-        low_mid = max(0, high_mid - window)
+        high_mid = int((clip_eff - 1 - margin_lsb) // high_step * high_step)
+        low_mid = int(max(0, high_mid - window_lsb))
         high = high_mid
         low = low_mid
         unit = "longer-frame LSB"
@@ -121,12 +141,12 @@ def analyse(
             if g_lm is None:
                 raise ValueError("mid_short requires a preceding long_mid pair")
             # 3F viewer compares Mid-Short on Long-scale (Mid * G_LM).
-            high = int(round(high_mid * g_lm / 100.0) * 100)
-            low = int(round(low_mid * g_lm / 100.0) * 100)
+            high = int(round(high_mid * g_lm / ms_step) * ms_step)
+            low = int(round(low_mid * g_lm / ms_step) * ms_step)
             unit = "Long-scale"
             fallback_mid_units = [low_mid, high_mid]
 
-        if high_mid / r_seam < 30:
+        if high_mid / r_seam < _SHORT_AT_SWITCH_12 * scale:
             warnings.append(
                 f"{name}: Short only {high_mid / r_seam:.0f} LSB at switch "
                 f"(ratio {r_seam:.1f} too large)"
@@ -198,7 +218,7 @@ def analyse(
                 "blend": round(area_blend, 1),
                 "short": round(area_short, 1),
             },
-            "short_noise_in_long_LSB": round(2.6 * r_seam, 1),
+            "short_noise_in_long_LSB": round(_NOISE_12 * scale * r_seam, 1),
             "long_clipped_pct": round(n_clip / long_img.size * 100, 2),
         }
         if fallback_mid_units is not None:

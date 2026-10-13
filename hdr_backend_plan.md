@@ -31,7 +31,7 @@ CHDR, per pixel, after black subtraction (`v = Long - black`):
 - Conversion gain is the HG/LG efficiency ratio, **per pair**. `--cg-mode` is one of `hcg`/`lcg` per file. Matching modes on a pair → conversion = **1**, all ratio in dB. Different modes → conversion gets the measured ratio after analog/exposure, dB is that remainder. 3F can mix (`hcg hcg lcg` only the Mid–Short pair uses conversion).
 - Single-frame Long/Short views are unreliable (clip ~255 LSB, ignore tone/gain). Gain can only be judged at the seam.
 - 2F map colours: cyan = long, green = blend, red = short.
-- 3F Mid–Short thresholds are compared on the **Long-scale composite** (Mid × G_LM). Low/High = Long–Mid Low/High × G_LM, rounded to 100. Confirmed on the `data/3f` set (3430/3730 → 6800/7400).
+- 3F Mid–Short thresholds are compared on the **Long-scale composite** (Mid × G_LM). Low/High = Long–Mid Low/High × G_LM, rounded to 100 at 12-bit (the step scales by 2^(bits−12)). Confirmed on the `data/3f` set (3430/3730 → 6800/7400).
 
 ## 2. CLI
 
@@ -39,8 +39,8 @@ CHDR, per pixel, after black subtraction (`v = Long - black`):
 hdr-suggest LONG.(bin|raw) [MID.(bin|raw)] SHORT.(bin|raw) [options]
   --black N              black level in LSB (required when no .bin provides OB)
   --bits 12              ADC bits (default 12)
-  --margin 120           High = floor((clip_eff-1-margin)/10)*10
-  --window 300           Low = High - window
+  --margin 120           High margin in native LSB. Omitted: 120 at 12-bit, × 2^(bits−12)
+  --window 300           Low = High − window, native LSB. Omitted: 300 at 12-bit, × 2^(bits−12)
   --exposures a [b] c    optional nominal exposures (ms), same order as files
   --cam-gain-db a [b] c  optional camera gain per frame (dB)
   --cg-mode hcg lcg      per-frame HCG/LCG (3F e.g. hcg hcg lcg)
@@ -70,22 +70,28 @@ cell(x)  = 2x2 mean (any Bayer phase; contains R,G,G,B)
 C_f      = cell(frame_f - black)
 K        = cell(frame_L>=clip)>0 OR cell(frame_S>=clip)>0
 for each adjacent pair (L,S):
-  valid  = ~K & 30 < C_L < 0.8*clip_eff & 5 < C_S < 0.8*clip_eff
+  scale  = 2^(bits-12)                       # 8-bit 1/16, 10-bit 1/4, 12-bit 1
+  valid  = ~K & 30*scale < C_L < 0.8*clip_eff & 5*scale < C_S < 0.8*clip_eff
   r_glob = median(C_L/C_S | valid)
-  r_seam = median(C_L/C_S | ~K, C_L>30, C_S>5, 0.65*clip_eff < C_L < 0.97*clip_eff)
+  r_seam = median(C_L/C_S | ~K, C_L>30*scale, C_S>5*scale,
+                  0.65*clip_eff < C_L < 0.97*clip_eff)
            # if >=2000 cells else r_glob
-  level curve: 15 log bins from 30 to clip_eff; median ratio if bin has >=500 cells
+  level curve: 15 log bins from 30*scale to clip_eff; median ratio if bin has >=500 cells
   gain_dB = 20*log10(r_seam)          # default: all ratio in dB
   conversion_ratio = 1
   pair modes differ: conversion = r_seam / (10^((gL-gS)/20) * tL/tS); gain_dB = remainder
   pair modes match:  conversion = 1; gain_dB = 20*log10(r_seam)
-  High   = floor((clip_eff - 1 - margin)/10)*10      # margin 120 -> 3730
-  Low    = High - window                              # window 300
+  # omitted margin/window are the 12-bit defaults, scaled. Explicit values are native LSB.
+  margin = 120*scale    window = round(300*scale)    step = max(1, round(10*scale))
+  High   = floor((clip_eff - 1 - margin)/step)*step   # 12-bit margin 120 -> 3730
+  Low    = High - window                              # 12-bit window 300 -> 3430
   Blend  = 0.5 ; Tone = 1
   area% on Long after black: v<Low, Low<=v<High, v>=High
-  short_noise_in_long_LSB = 2.6 * r_seam
+  short_noise_in_long_LSB = 2.6 * scale * r_seam
 chain 3 frames: dB(L,S) = dB(L,M) + dB(M,S)
-  Mid-Short Low/High = round(LM * G_LM / 100)*100     # Long-scale; 3430/3730 * 1.987 -> 6800/7400
+  ms_step = max(1, round(100*scale))                  # 12-bit: 100
+  Mid-Short Low/High = round(LM * G_LM / ms_step)*ms_step
+                                                      # 3430/3730 * 1.987 -> 6800/7400
   area% for Mid-Short: v = (Mid - black) * G_LM
 ```
 
@@ -94,7 +100,7 @@ NEVER use mean(all pixels) ratio, and NEVER compute dB from typed exposures. Opt
 ## 5. Warnings (non-fatal)
 
 - Long not clipped (`max < clip`): Short adds nothing.
-- ratio < 1.5 (frames ~equal) or `High/ratio < 30` LSB (Short at switch too noisy).
+- ratio < 1.5 (frames ~equal) or `High/ratio < 30*scale` LSB (Short at switch too noisy).
 - `|dB_seam − dB_glob| > 0.5` or per-level ratio in a bin above `0.4*clip_eff` differs from seam by >5%.
 - Short fraction > 40%: Long exposure too long / thresholds too low.
 - Black differs between frames by >1.5 LSB.

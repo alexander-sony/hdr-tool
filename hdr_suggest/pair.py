@@ -14,28 +14,38 @@ def pair_gain(
     short_img: np.ndarray,
     black: float,
     clip: float,
+    scale: float = 1.0,
 ) -> tuple[float, float, list[tuple[float, float, float, int]], int]:
     """Estimate Long/Short from 2x2 Bayer cell means.
 
     Clipped cells are dropped. r_glob is the median ratio on mid-tones
-    (30 < C_long < 0.8*clip_eff). r_seam is the same median near clip
+    (30*scale < C_long < 0.8*clip_eff). r_seam is the same median near clip
     (0.65–0.97 of clip_eff), where the merge actually happens; falls back
-    to r_glob if fewer than 2000 cells. The level curve is 15 log bins for
-    the linearity warning in analyse().
+    to r_glob if fewer than 2000 cells. The level curve is 15 log bins from
+    30*scale to clip_eff for the linearity warning in analyse().
+    `scale` is 2^(bits-12), so the 12-bit floors 30 and 5 match the codes.
     """
     clip_eff = clip - black
+    long_floor = 30.0 * scale
+    short_floor = 5.0 * scale
     cl = load.blocks(long_img - black)
     cs = load.blocks(short_img - black)
     clipped = load.blocks((long_img >= clip).astype(np.float32)) > 0
     clipped |= load.blocks((short_img >= clip).astype(np.float32)) > 0
 
-    ok = ~clipped & (cl > 30) & (cs > 5) & (cl < 0.8 * clip_eff) & (cs < 0.8 * clip_eff)
+    ok = (
+        ~clipped
+        & (cl > long_floor)
+        & (cs > short_floor)
+        & (cl < 0.8 * clip_eff)
+        & (cs < 0.8 * clip_eff)
+    )
     if int(ok.sum()) == 0:
         raise ValueError("no overlapping valid cells for gain estimate")
     r_glob = float(np.median(cl[ok] / cs[ok]))
 
-    ok2 = ~clipped & (cl > 30) & (cs > 5)
-    edges = np.geomspace(30, clip_eff, 16)
+    ok2 = ~clipped & (cl > long_floor) & (cs > short_floor)
+    edges = np.geomspace(long_floor, clip_eff, 16)
     curve: list[tuple[float, float, float, int]] = []
     for lo, hi in itertools.pairwise(edges):
         mask = ok2 & (cl >= lo) & (cl < hi)

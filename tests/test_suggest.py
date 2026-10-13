@@ -92,6 +92,58 @@ def test_pair_ratio_synthetic(tmp_path: Path) -> None:
     assert str(pair["gain_dB"]) in text or f"{pair['gain_dB']:.2f}" in text
 
 
+@pytest.mark.parametrize(
+    ("bits", "low", "high"),
+    [(12, 3430, 3730), (10, 857, 932), (8, 212, 231)],
+)
+def test_thresholds_follow_bit_depth(
+    tmp_path: Path, bits: int, low: int, high: int
+) -> None:
+    """Same scene at 8/10/12 bit: ratios hold, Low/High sit just under clip."""
+    scale = 2 ** (bits - 12)
+    rng = np.random.default_rng(0)
+    height, width = 128, 128
+    black = float(round(240 * scale))
+    clip = 2**bits - 1
+    signal = rng.uniform(200, 1500, size=(height, width)) * scale
+    long_img = np.clip(np.round(black + signal), 0, clip).astype(np.uint16)
+    short_img = np.clip(np.round(black + signal / 2), 0, clip).astype(np.uint16)
+    long_img[0:4, 0:4] = clip
+    p_long = _write_raw(tmp_path / "long", long_img, bits=bits)
+    p_short = _write_raw(tmp_path / "short", short_img, bits=bits)
+    result = suggest.analyse([p_long, p_short], black=black, bits=bits)
+    pair = result["pairs"][0]
+    assert pair["low"] == low
+    assert pair["high"] == high
+    assert pair["ratio_seam"] == pytest.approx(2.0, rel=0.05)
+    assert pair["gain_dB"] == pytest.approx(6.02, abs=0.4)
+    assert pair["conversion_gain_ratio"] == 1
+    assert pair["blend"] == 0.5
+    assert pair["tone"] == 1
+    assert pair["short_noise_in_long_LSB"] == pytest.approx(
+        2.6 * scale * pair["ratio_seam"], abs=0.15
+    )
+
+
+def test_explicit_margin_stays_native(tmp_path: Path) -> None:
+    """A passed margin/window is this frame's LSB, not scaled again."""
+    rng = np.random.default_rng(0)
+    black = 15.0
+    clip = 255
+    signal = rng.uniform(12, 90, size=(64, 64))
+    long_img = np.clip(np.round(black + signal), 0, clip).astype(np.uint16)
+    short_img = np.clip(np.round(black + signal / 2), 0, clip).astype(np.uint16)
+    long_img[0:2, 0:2] = clip
+    p_long = _write_raw(tmp_path / "long", long_img, bits=8)
+    p_short = _write_raw(tmp_path / "short", short_img, bits=8)
+    result = suggest.analyse(
+        [p_long, p_short], black=black, bits=8, margin=20, window=10
+    )
+    pair = result["pairs"][0]
+    assert pair["high"] == 219
+    assert pair["low"] == 209
+
+
 def test_order_warning(tmp_path: Path) -> None:
     bright = np.full((32, 32), 3000, dtype=np.uint16)
     dark = np.full((32, 32), 500, dtype=np.uint16)
@@ -248,3 +300,21 @@ def test_data_hcg_lcg() -> None:
     without = suggest.analyse(paths)
     assert without["pairs"][0]["conversion_gain_ratio"] == 1
     assert without["pairs"][0]["gain_dB"] == pytest.approx(9.26, abs=0.2)
+
+
+@pytest.mark.skipif(
+    not (DATA_HCG_LCG / "hcg-3db-8b.bin").is_file(),
+    reason="8-bit hcg-lcg bins missing",
+)
+def test_data_hcg_lcg_8b() -> None:
+    paths = [DATA_HCG_LCG / "hcg-3db-8b.bin", DATA_HCG_LCG / "lcg-3db-8b.bin"]
+    result = suggest.analyse(
+        paths, bits=8, cg_modes=["hcg", "lcg"], cam_gain_db=[3.0, 3.0]
+    )
+    pair = result["pairs"][0]
+    assert result["black"] == pytest.approx(15.2, abs=0.2)
+    assert pair["gain_dB"] == pytest.approx(0.0, abs=0.01)
+    assert pair["conversion_gain_ratio"] == pytest.approx(2.94, abs=0.1)
+    assert pair["low"] == 212
+    assert pair["high"] == 231
+    assert pair["area_pct"]["blend"] < 10

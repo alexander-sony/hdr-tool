@@ -29,9 +29,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--bits", type=int, default=12, help="ADC bit depth (default 12)"
     )
     parser.add_argument(
-        "--margin", type=float, default=120, help="High threshold margin"
+        "--margin",
+        type=float,
+        default=None,
+        help=(
+            "High-threshold margin in this frame's LSB. "
+            "Omitted: 120 at 12-bit, scaled by 2^(bits-12)"
+        ),
     )
-    parser.add_argument("--window", type=int, default=300, help="Low = High - window")
+    parser.add_argument(
+        "--window",
+        type=int,
+        default=None,
+        help=(
+            "Low = High - window, in this frame's LSB. "
+            "Omitted: 300 at 12-bit, scaled by 2^(bits-12)"
+        ),
+    )
     parser.add_argument(
         "--exposures",
         type=float,

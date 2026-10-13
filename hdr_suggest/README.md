@@ -15,7 +15,7 @@ uv run hdr-suggest LONG.raw MID.raw SHORT.raw --black 240
 
 `--black` is required for `.raw` unless a `.bin` in the same run supplies optical-black rows. Do not guess black from image content. Do not auto-sort frames.
 
-Optional: `--bits`, `--margin`, `--window`, `--exposures`, `--cam-gain-db`, `--cg-mode`, `--json out.json`. Typed exposures are not the gain unless a pair has mixed `--cg-mode` (then they set the dB remainder). `--cg-mode` is one of `hcg`/`lcg` per file.
+Optional: `--bits` (8, 10, or 12), `--margin`, `--window`, `--exposures`, `--cam-gain-db`, `--cg-mode`, `--json out.json`. Omitted `--margin` and `--window` are the 12-bit values 120 and 300, scaled by 2^(bits−12) into the frame's LSB (8-bit → 7.5 and 19, so Low/High sit just under clip). An explicit margin or window is used as given. Typed exposures are not the gain unless a pair has mixed `--cg-mode` (then they set the dB remainder). `--cg-mode` is one of `hcg`/`lcg` per file.
 
 ## Example (`data/3f`)
 
