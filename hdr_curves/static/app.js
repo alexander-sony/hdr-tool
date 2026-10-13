@@ -308,7 +308,7 @@ function setOutputs(state) {
     notes.push("Matched gain: blend does not move the stitched curve.");
   }
   notes.push(
-    "Speckles sit on the blend-window patch (Bayer + seam noise). At noise 0 only Bayer remains; raise noise or tighten Low/High to see Map cyan/red flips.",
+    "Speckles sit on the blend-window patch (Bayer + blend noise). At noise 0 only Bayer remains; raise noise or tighten Low/High to see Map cyan/red flips.",
   );
   if (state.high > state.clipEff) {
     notes.push(
