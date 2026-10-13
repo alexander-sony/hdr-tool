@@ -124,6 +124,13 @@ header h1 {
   padding: 0.2rem 0;
 }
 
+.pair-title {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--fg);
+}
+
 .grid {
   display: flex;
   flex-direction: column;
@@ -257,6 +264,42 @@ figure > canvas {
 
 .curve-map-blend {
   stroke: var(--map-blend);
+  stroke-width: 2.25;
+  fill: none;
+}
+
+.curve-mid {
+  stroke: #7b2cbf;
+  stroke-width: 2.25;
+  fill: none;
+}
+
+.curve-3f-long {
+  stroke: #e30613;
+  stroke-width: 2.25;
+  fill: none;
+}
+
+.curve-3f-lm {
+  stroke: #f4d03f;
+  stroke-width: 2.25;
+  fill: none;
+}
+
+.curve-3f-mid {
+  stroke: #7b2cbf;
+  stroke-width: 2.25;
+  fill: none;
+}
+
+.curve-3f-ms {
+  stroke: #3ddc64;
+  stroke-width: 2.25;
+  fill: none;
+}
+
+.curve-3f-short {
+  stroke: #00d5d5;
   stroke-width: 2.25;
   fill: none;
 }

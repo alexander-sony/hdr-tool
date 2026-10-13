@@ -104,3 +104,62 @@ def tone_8bit(
 def synthetic_peak(clip_eff: float, applied_gain: float) -> float:
     """Top of short*G when short reaches the AD clip."""
     return float(clip_eff * applied_gain)
+
+
+def map_region_2f(long_code: float, low: float, high: float) -> str:
+    """2F Map source: long / blend / short from long-frame code."""
+    if long_code < low:
+        return "long"
+    if long_code >= high:
+        return "short"
+    return "blend"
+
+
+def map_region_3f(
+    long_code: float,
+    mid_gained: float,
+    low_lm: float,
+    high_lm: float,
+    low_ms: float,
+    high_ms: float,
+) -> str:
+    """3F Map source after Long-Mid then Mid-Short on the Long-scale composite.
+
+    Mid-Short Low/High are Long-scale (LM thresholds × G_LM). Long itself
+    never reaches those values; Short is selected from gained Mid.
+    """
+    if long_code < low_lm:
+        stage1 = "long"
+        c1 = long_code
+    elif long_code >= high_lm:
+        stage1 = "mid"
+        c1 = mid_gained
+    else:
+        stage1 = "lm_blend"
+        c1 = long_code
+
+    if c1 < low_ms:
+        return stage1
+    if c1 >= high_ms:
+        return "short"
+    return "ms_blend"
+
+
+def composite_3f(
+    long_code: ArrayLike,
+    mid_gained: ArrayLike,
+    short_gained: ArrayLike,
+    low_lm: float,
+    high_lm: float,
+    blend_lm: float,
+    low_ms: float,
+    high_ms: float,
+    blend_ms: float,
+) -> np.ndarray:
+    """Two-stage CHDR stitch: Long-Mid, then Mid-Short on Long-scale.
+
+    3F slide (Function 5): β weights Mid in the LM window, α weights Short
+    in the MS window. 2F instead puts α on Long. At 0.5 they agree.
+    """
+    first = composite(long_code, mid_gained, low_lm, high_lm, 1.0 - blend_lm)
+    return composite(first, short_gained, low_ms, high_ms, 1.0 - blend_ms)

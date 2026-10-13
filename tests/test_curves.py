@@ -69,3 +69,44 @@ def test_tone_linear_and_shadow_lift() -> None:
         y = model.tone_8bit(dense, peak, tone=t)
         assert np.all(np.diff(y) >= -1e-9)
         assert y[-1] == pytest.approx(255.0)
+
+
+def test_map_region_3f_data3f_style() -> None:
+    clip = 3855.0
+    g_lm = 1.987
+    low_lm, high_lm = 3430.0, 3730.0
+    low_ms, high_ms = 6800.0, 7400.0
+
+    def region_at(lum: float) -> str:
+        long_c, _, mid_g = model.frame_codes(
+            lum, true_ratio=g_lm, applied_gain=g_lm, clip_eff=clip
+        )
+        return model.map_region_3f(
+            float(long_c), float(mid_g), low_lm, high_lm, low_ms, high_ms
+        )
+
+    assert region_at(1000.0) == "long"
+    assert region_at(3600.0) == "lm_blend"
+    assert region_at(5000.0) == "mid"
+    assert region_at(7100.0) == "ms_blend"
+    assert region_at(9000.0) == "short"
+    # Long ADC never reaches Long-scale Mid-Short thresholds.
+    assert model.map_region_3f(clip, clip, low_lm, high_lm, low_ms, high_ms) == "mid"
+
+
+def test_composite_3f_matches_two_stage_stitch() -> None:
+    long_v = np.array([1000.0, 3600.0, 5000.0])
+    mid_g = np.array([1000.0, 3600.0, 5000.0])
+    short_g = np.array([1000.0, 3600.0, 8000.0])
+    out = model.composite_3f(long_v, mid_g, short_g, 3430, 3730, 0.5, 6800, 7400, 0.5)
+    first = model.composite(long_v, mid_g, 3430, 3730, 0.5)
+    assert out == pytest.approx(model.composite(first, short_g, 6800, 7400, 0.5))
+
+
+def test_composite_3f_blend_weights_shorter_frame() -> None:
+    # Function 5: β=1 → LM window is all Mid; α=1 → MS window is all Short.
+    long_v = np.array([3600.0])
+    mid_g = np.array([4000.0])
+    short_g = np.array([4000.0])
+    out = model.composite_3f(long_v, mid_g, short_g, 3430, 3730, 1.0, 6800, 7400, 0.5)
+    assert out[0] == pytest.approx(4000.0)

@@ -41,10 +41,18 @@
 
       <section class="controls" aria-label="Parameters">
         <div class="presets">
+          <label for="frames">
+            Frames
+            <select id="frames">
+              <option value="2">2F</option>
+              <option value="3">3F</option>
+            </select>
+          </label>
           <label for="preset">
             Preset
             <select id="preset">
               <option value="3f2f">2F data/3f (11.95 dB)</option>
+              <option value="3f">3F data/3f (5.96 + 5.97 dB)</option>
               <option value="hcg-lcg">HCG/LCG (0 dB × 2.9)</option>
               <option value="slide">Slide example (30 dB × 2.6)</option>
               <option value="custom">Custom</option>
@@ -65,6 +73,7 @@
             <span>ADC bits</span>
             <input type="number" id="bits" min="8" max="16" step="1" />
           </label>
+          <p class="pair-title" id="pair1-title">Long–Short (HG)</p>
           <label>
             <span>Gain [dB] <output id="gain-db-out" for="gain-db"></output></span>
             <input type="range" id="gain-db" min="0" max="40" step="0.01" />
@@ -76,7 +85,7 @@
             ></span>
             <input type="range" id="conversion" min="1" max="4" step="0.01" />
           </label>
-          <label class="checkbox">
+          <label class="checkbox" id="match-ratio-label">
             <input type="checkbox" id="match-ratio" checked />
             Short matches this gain (R = G)
           </label>
@@ -93,9 +102,35 @@
             <input type="range" id="high" min="0" max="8000" step="10" />
           </label>
           <label>
-            <span>Blend α <output id="blend-out" for="blend"></output></span>
+            <span><span id="blend1-title">Blend α</span> <output id="blend-out" for="blend"></output></span>
             <input type="range" id="blend" min="0" max="1" step="0.01" />
           </label>
+          <div id="pair2" class="hidden">
+            <p class="pair-title">Mid–Short (SLG–LG, Long-scale)</p>
+            <label>
+              <span>Gain [dB] <output id="gain-db2-out" for="gain-db2"></output></span>
+              <input type="range" id="gain-db2" min="0" max="40" step="0.01" />
+            </label>
+            <label>
+              <span
+                >Conversion [×]
+                <output id="conversion2-out" for="conversion2"></output
+              ></span>
+              <input type="range" id="conversion2" min="1" max="4" step="0.01" />
+            </label>
+            <label>
+              <span>Low threshold [LSB] <output id="low2-out" for="low2"></output></span>
+              <input type="range" id="low2" min="0" max="16000" step="10" />
+            </label>
+            <label>
+              <span>High threshold [LSB] <output id="high2-out" for="high2"></output></span>
+              <input type="range" id="high2" min="0" max="16000" step="10" />
+            </label>
+            <label>
+              <span>Blend α (Short–Mid) <output id="blend2-out" for="blend2"></output></span>
+              <input type="range" id="blend2" min="0" max="1" step="0.01" />
+            </label>
+          </div>
           <label>
             <span>Tone <output id="tone-out" for="tone"></output></span>
             <input type="range" id="tone" min="0" max="4" step="1" />

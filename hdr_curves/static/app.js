@@ -7,6 +7,7 @@
 
 const PRESETS = {
   "3f2f": {
+    frames: 2,
     black: 240,
     bits: 12,
     gainDb: 11.95,
@@ -18,7 +19,26 @@ const PRESETS = {
     blend: 0.5,
     tone: 1,
   },
+  "3f": {
+    frames: 3,
+    black: 240,
+    bits: 12,
+    gainDb: 5.96,
+    conversion: 1,
+    gainDb2: 5.97,
+    conversion2: 1,
+    matchRatio: true,
+    trueRatio: null,
+    low: 3430,
+    high: 3730,
+    blend: 0.5,
+    low2: 6800,
+    high2: 7400,
+    blend2: 0.5,
+    tone: 1,
+  },
   "hcg-lcg": {
+    frames: 2,
     black: 240,
     bits: 12,
     gainDb: 0,
@@ -31,6 +51,7 @@ const PRESETS = {
     tone: 0,
   },
   slide: {
+    frames: 2,
     black: 200,
     bits: 12,
     gainDb: 30,
@@ -77,15 +98,19 @@ function syntheticPeak(clipEff, appliedGain) {
 // --- DOM ---
 
 const els = {
+  frames: document.getElementById("frames"),
   preset: document.getElementById("preset"),
   jsonFile: document.getElementById("json-file"),
   black: document.getElementById("black"),
   bits: document.getElementById("bits"),
+  pair1Title: document.getElementById("pair1-title"),
+  pair2: document.getElementById("pair2"),
   gainDb: document.getElementById("gain-db"),
   gainDbOut: document.getElementById("gain-db-out"),
   conversion: document.getElementById("conversion"),
   conversionOut: document.getElementById("conversion-out"),
   matchRatio: document.getElementById("match-ratio"),
+  matchRatioLabel: document.getElementById("match-ratio-label"),
   trueRatioWrap: document.getElementById("true-ratio-wrap"),
   trueRatio: document.getElementById("true-ratio"),
   trueRatioOut: document.getElementById("true-ratio-out"),
@@ -95,6 +120,17 @@ const els = {
   highOut: document.getElementById("high-out"),
   blend: document.getElementById("blend"),
   blendOut: document.getElementById("blend-out"),
+  blend1Title: document.getElementById("blend1-title"),
+  gainDb2: document.getElementById("gain-db2"),
+  gainDb2Out: document.getElementById("gain-db2-out"),
+  conversion2: document.getElementById("conversion2"),
+  conversion2Out: document.getElementById("conversion2-out"),
+  low2: document.getElementById("low2"),
+  low2Out: document.getElementById("low2-out"),
+  high2: document.getElementById("high2"),
+  high2Out: document.getElementById("high2-out"),
+  blend2: document.getElementById("blend2"),
+  blend2Out: document.getElementById("blend2-out"),
   tone: document.getElementById("tone"),
   toneOut: document.getElementById("tone-out"),
   readout: document.getElementById("readout"),
@@ -103,18 +139,47 @@ const els = {
   plotThresh: document.getElementById("plot-thresh"),
   plotTone: document.getElementById("plot-tone"),
   plotMap: document.getElementById("plot-map"),
+  capGain: document.querySelector("#plot-gain")?.closest("figure")?.querySelector("figcaption"),
+  capThresh: document.querySelector("#plot-thresh")?.closest("figure")?.querySelector("figcaption"),
+  capMap: document.querySelector("#plot-map")?.closest("figure")?.querySelector("figcaption"),
 };
 
-const MAP_FILL = {
+const MAP_FILL_2F = {
   long: "#00d5d5",
   blend: "#3ddc64",
   short: "#f03a3a",
 };
 
-function regionOf(v, low, high) {
-  if (v < low) return "long";
-  if (v >= high) return "short";
+const MAP_FILL_3F = {
+  long: "#e30613",
+  lm_blend: "#f4d03f",
+  mid: "#7b2cbf",
+  ms_blend: "#3ddc64",
+  short: "#00d5d5",
+};
+
+function region2f(longCode, low, high) {
+  if (longCode < low) return "long";
+  if (longCode >= high) return "short";
   return "blend";
+}
+
+function region3f(longCode, midGained, low, high, low2, high2) {
+  let stage1;
+  let c1;
+  if (longCode < low) {
+    stage1 = "long";
+    c1 = longCode;
+  } else if (longCode >= high) {
+    stage1 = "mid";
+    c1 = midGained;
+  } else {
+    stage1 = "lm_blend";
+    c1 = longCode;
+  }
+  if (c1 < low2) return stage1;
+  if (c1 >= high2) return "short";
+  return "ms_blend";
 }
 
 let applyingPreset = false;
@@ -124,12 +189,18 @@ function readState() {
   const bits = Number(els.bits.value);
   const clip = Math.pow(2, bits) - 1;
   const clipEff = clip - black;
+  const is3f = els.frames.value === "3";
   const gainDb = Number(els.gainDb.value);
   const conversion = Number(els.conversion.value);
   const g = gainLinear(gainDb, conversion);
-  const matchRatio = els.matchRatio.checked;
+  const gainDb2 = Number(els.gainDb2.value);
+  const conversion2 = Number(els.conversion2.value);
+  const g2 = gainLinear(gainDb2, conversion2);
+  const matchRatio = is3f ? true : els.matchRatio.checked;
   const trueRatio = matchRatio ? g : Number(els.trueRatio.value);
+  const trueRatio2 = g2;
   return {
+    is3f,
     black,
     bits,
     clip,
@@ -137,11 +208,18 @@ function readState() {
     gainDb,
     conversion,
     g,
+    gainDb2,
+    conversion2,
+    g2,
     matchRatio,
     trueRatio,
+    trueRatio2,
     low: Number(els.low.value),
     high: Number(els.high.value),
     blend: Number(els.blend.value),
+    low2: Number(els.low2.value),
+    high2: Number(els.high2.value),
+    blend2: Number(els.blend2.value),
     tone: Number(els.tone.value),
   };
 }
@@ -153,26 +231,57 @@ function setOutputs(state) {
   els.lowOut.textContent = String(Math.round(state.low));
   els.highOut.textContent = String(Math.round(state.high));
   els.blendOut.textContent = state.blend.toFixed(2);
+  els.gainDb2Out.textContent = state.gainDb2.toFixed(2);
+  els.conversion2Out.textContent = state.conversion2.toFixed(2);
+  els.low2Out.textContent = String(Math.round(state.low2));
+  els.high2Out.textContent = String(Math.round(state.high2));
+  els.blend2Out.textContent = state.blend2.toFixed(2);
   els.toneOut.textContent = String(state.tone);
-  els.trueRatioWrap.classList.toggle("hidden", state.matchRatio);
+  els.pair2.classList.toggle("hidden", !state.is3f);
+  els.matchRatioLabel.classList.toggle("hidden", state.is3f);
+  els.trueRatioWrap.classList.toggle("hidden", state.is3f || state.matchRatio);
+  els.pair1Title.textContent = state.is3f ? "Long–Mid (HG–LG)" : "Long–Short (HG)";
+  els.blend1Title.textContent = state.is3f ? "Blend β (Mid–Long)" : "Blend α";
+  if (els.capGain) {
+    els.capGain.textContent = state.is3f
+      ? "1. Composite gain — long / mid×G / short×G"
+      : "1. Composite gain — long vs short×G";
+  }
+  if (els.capThresh) {
+    els.capThresh.textContent = state.is3f
+      ? "2. Threshold stitch — red long, yellow LM, purple mid, green MS, cyan short"
+      : "2. Threshold stitch — cyan long, green blend, red short";
+  }
+  if (els.capMap) {
+    els.capMap.textContent = state.is3f
+      ? "4. Synthetic Map — 3F regions (not a real frame)"
+      : "4. Synthetic Map — long-code patches vs Low/High (not a real frame)";
+  }
 
+  const gTotal = state.is3f ? state.g * state.g2 : state.g;
   const seamMatch = Math.abs(state.trueRatio - state.g) / state.g < 0.01;
-  els.readout.textContent =
-    `G = ${state.g.toFixed(3)}  ·  clip after black = ${state.clipEff.toFixed(1)}` +
-    `  ·  seam ${seamMatch ? "matches (R ≈ G)" : "mismatched (kink at switch)"}` +
-    `  ·  synthetic peak ≈ ${(state.clipEff * state.g).toFixed(0)}`;
+  els.readout.textContent = state.is3f
+    ? `G_LM = ${state.g.toFixed(3)}  ·  G_MS = ${state.g2.toFixed(3)}  ·  chain G = ${gTotal.toFixed(3)}  ·  clip = ${state.clipEff.toFixed(1)}  ·  peak ≈ ${(state.clipEff * gTotal).toFixed(0)}`
+    : `G = ${state.g.toFixed(3)}  ·  clip after black = ${state.clipEff.toFixed(1)}` +
+      `  ·  seam ${seamMatch ? "matches (R ≈ G)" : "mismatched (kink at switch)"}` +
+      `  ·  synthetic peak ≈ ${(state.clipEff * state.g).toFixed(0)}`;
 
   const notes = [];
-  if (seamMatch) {
+  if (!state.is3f && seamMatch) {
     notes.push("Matched gain: blend does not move the stitched curve.");
   }
   if (state.high > state.clipEff) {
     notes.push(
-      "High is above clip-after-black: long never reaches High, so short is never selected.",
+      state.is3f
+        ? "LM High is above clip: long never reaches it, so Mid is never selected from Long."
+        : "High is above clip-after-black: long never reaches High, so short is never selected.",
     );
   }
   if (state.low >= state.high) {
-    notes.push("Low ≥ High: blend window is empty.");
+    notes.push("Low ≥ High: first blend window is empty.");
+  }
+  if (state.is3f && state.low2 >= state.high2) {
+    notes.push("MS Low ≥ High: second blend window is empty.");
   }
   els.notes.textContent = notes.join(" ");
 }
@@ -181,6 +290,7 @@ function applyPreset(name) {
   const p = PRESETS[name];
   if (!p) return;
   applyingPreset = true;
+  els.frames.value = String(p.frames ?? 2);
   els.black.value = String(p.black);
   els.bits.value = String(p.bits);
   els.gainDb.value = String(p.gainDb);
@@ -191,6 +301,11 @@ function applyPreset(name) {
   els.low.value = String(p.low);
   els.high.value = String(p.high);
   els.blend.value = String(p.blend);
+  els.gainDb2.value = String(p.gainDb2 ?? 5.97);
+  els.conversion2.value = String(p.conversion2 ?? 1);
+  els.low2.value = String(p.low2 ?? 6800);
+  els.high2.value = String(p.high2 ?? 7400);
+  els.blend2.value = String(p.blend2 ?? 0.5);
   els.tone.value = String(p.tone);
   applyingPreset = false;
   redraw();
@@ -201,28 +316,57 @@ function markCustom() {
 }
 
 function sampleCurve(state, n = 240) {
-  const peak = syntheticPeak(state.clipEff, state.g);
+  const gTotal = state.is3f ? state.g * state.g2 : state.g;
+  const peak = syntheticPeak(state.clipEff, gTotal);
   const xMax = Math.max(peak * 1.05, state.clipEff * 1.2);
   const xs = [];
   const longY = [];
+  const midY = [];
   const shortY = [];
   const compY = [];
+  const region = [];
   for (let i = 0; i < n; i++) {
     const x = (i / (n - 1)) * xMax;
-    const { longCode, shortGained } = frameCodes(
-      x,
-      state.trueRatio,
-      state.g,
-      state.clipEff,
-    );
+    const longCode = Math.min(x, state.clipEff);
     xs.push(x);
     longY.push(longCode);
-    shortY.push(shortGained);
-    compY.push(
-      composite(longCode, shortGained, state.low, state.high, state.blend),
-    );
+    if (state.is3f) {
+      const midG = Math.min(x / state.trueRatio, state.clipEff) * state.g;
+      const shortG =
+        Math.min(x / (state.trueRatio * state.trueRatio2), state.clipEff) *
+        state.g *
+        state.g2;
+      const c1 = composite(
+        longCode,
+        midG,
+        state.low,
+        state.high,
+        1 - state.blend,
+      );
+      midY.push(midG);
+      shortY.push(shortG);
+      compY.push(
+        composite(c1, shortG, state.low2, state.high2, 1 - state.blend2),
+      );
+      region.push(
+        region3f(longCode, midG, state.low, state.high, state.low2, state.high2),
+      );
+    } else {
+      const { shortGained } = frameCodes(
+        x,
+        state.trueRatio,
+        state.g,
+        state.clipEff,
+      );
+      midY.push(longCode);
+      shortY.push(shortGained);
+      compY.push(
+        composite(longCode, shortGained, state.low, state.high, state.blend),
+      );
+      region.push(region2f(longCode, state.low, state.high));
+    }
   }
-  return { xs, longY, shortY, compY, xMax, peak };
+  return { xs, longY, midY, shortY, compY, region, xMax, peak };
 }
 
 function clearSvg(svg) {
@@ -412,6 +556,14 @@ function drawGainPlot(state, samples) {
       d: pathFrom(samples.xs, samples.longY, mapX, mapY),
     }),
   );
+  if (state.is3f) {
+    svg.appendChild(
+      svgEl("path", {
+        class: "curve-mid",
+        d: pathFrom(samples.xs, samples.midY, mapX, mapY),
+      }),
+    );
+  }
   svg.appendChild(
     svgEl("path", {
       class: "curve-short",
@@ -419,10 +571,16 @@ function drawGainPlot(state, samples) {
     }),
   );
 
-  legend(svg, [
-    { cls: "curve-long", label: "Long (HG)" },
-    { cls: "curve-short", label: "Short × G" },
-  ], pad.l + 12, pad.t + 18);
+  legend(svg, state.is3f
+    ? [
+        { cls: "curve-long", label: "Long" },
+        { cls: "curve-mid", label: "Mid × G_LM" },
+        { cls: "curve-short", label: "Short × G_chain" },
+      ]
+    : [
+        { cls: "curve-long", label: "Long (HG)" },
+        { cls: "curve-short", label: "Short × G" },
+      ], pad.l + 12, pad.t + 18);
 }
 
 function drawThreshPlot(state, samples) {
@@ -443,10 +601,18 @@ function drawThreshPlot(state, samples) {
     "CIS output",
   );
 
-  for (const [val, label] of [
-    [state.low, "Low"],
-    [state.high, "High"],
-  ]) {
+  const threshLabels = state.is3f
+    ? [
+        [state.low, "LM Low"],
+        [state.high, "LM High"],
+        [state.low2, "MS Low"],
+        [state.high2, "MS High"],
+      ]
+    : [
+        [state.low, "Low"],
+        [state.high, "High"],
+      ];
+  for (const [val, label] of threshLabels) {
     if (val < 0 || val > yMax) continue;
     svg.appendChild(
       svgEl("line", {
@@ -476,32 +642,74 @@ function drawThreshPlot(state, samples) {
     }),
   );
 
-  const inLong = (i) => samples.longY[i] < state.low;
-  const inBlend = (i) =>
-    samples.longY[i] >= state.low && samples.longY[i] < state.high;
-  const inShort = (i) => samples.longY[i] >= state.high;
-
-  appendPath(
-    svg,
-    "curve-map-long",
-    pathFromMask(samples.xs, samples.longY, mapX, mapY, inLong),
-  );
-  appendPath(
-    svg,
-    "curve-map-blend",
-    pathFromMask(samples.xs, samples.compY, mapX, mapY, inBlend),
-  );
-  appendPath(
-    svg,
-    "curve-map-short",
-    pathFromMask(samples.xs, samples.shortY, mapX, mapY, inShort),
-  );
-
-  legend(svg, [
-    { cls: "curve-map-long", label: "Long" },
-    { cls: "curve-map-blend", label: "Blend" },
-    { cls: "curve-map-short", label: "Short" },
-  ], pad.l + 12, pad.t + 18);
+  if (state.is3f) {
+    const segs = [
+      ["long", "curve-3f-long"],
+      ["lm_blend", "curve-3f-lm"],
+      ["mid", "curve-3f-mid"],
+      ["ms_blend", "curve-3f-ms"],
+      ["short", "curve-3f-short"],
+    ];
+    for (const [name, cls] of segs) {
+      appendPath(
+        svg,
+        cls,
+        pathFromMask(
+          samples.xs,
+          samples.compY,
+          mapX,
+          mapY,
+          (i) => samples.region[i] === name,
+        ),
+      );
+    }
+    legend(svg, [
+      { cls: "curve-3f-long", label: "Long" },
+      { cls: "curve-3f-lm", label: "LM blend" },
+      { cls: "curve-3f-mid", label: "Mid" },
+      { cls: "curve-3f-ms", label: "MS blend" },
+      { cls: "curve-3f-short", label: "Short" },
+    ], pad.l + 12, pad.t + 14);
+  } else {
+    appendPath(
+      svg,
+      "curve-map-long",
+      pathFromMask(
+        samples.xs,
+        samples.longY,
+        mapX,
+        mapY,
+        (i) => samples.region[i] === "long",
+      ),
+    );
+    appendPath(
+      svg,
+      "curve-map-blend",
+      pathFromMask(
+        samples.xs,
+        samples.compY,
+        mapX,
+        mapY,
+        (i) => samples.region[i] === "blend",
+      ),
+    );
+    appendPath(
+      svg,
+      "curve-map-short",
+      pathFromMask(
+        samples.xs,
+        samples.shortY,
+        mapX,
+        mapY,
+        (i) => samples.region[i] === "short",
+      ),
+    );
+    legend(svg, [
+      { cls: "curve-map-long", label: "Long" },
+      { cls: "curve-map-blend", label: "Blend" },
+      { cls: "curve-map-short", label: "Short" },
+    ], pad.l + 12, pad.t + 18);
+  }
 }
 
 function drawTonePlot(state, samples) {
@@ -538,6 +746,35 @@ function drawTonePlot(state, samples) {
   ], pad.l + 12, pad.t + 18);
 }
 
+function patchValues(state) {
+  const clip = Math.max(state.clipEff, 1);
+  if (!state.is3f) {
+    return [0.15, 0.32, 0.5, 0.68, 0.82, 0.9, 0.96, 1.0].map((f) => f * clip);
+  }
+  const peak = clip * state.g * state.g2;
+  return [
+    0.25 * state.low,
+    0.7 * state.low,
+    (state.low + state.high) / 2,
+    state.high + 0.2 * Math.max(state.low2 - state.high, 200),
+    (state.low2 + state.high2) / 2,
+    state.high2 * 1.08,
+    0.78 * peak,
+    0.96 * peak,
+  ];
+}
+
+function colorOf(state, lum) {
+  const longCode = Math.min(lum, state.clipEff);
+  if (!state.is3f) {
+    return MAP_FILL_2F[region2f(longCode, state.low, state.high)];
+  }
+  const midG = Math.min(lum / state.trueRatio, state.clipEff) * state.g;
+  return MAP_FILL_3F[
+    region3f(longCode, midG, state.low, state.high, state.low2, state.high2)
+  ];
+}
+
 function drawMap(state) {
   const canvas = els.plotMap;
   const ctx = canvas.getContext("2d");
@@ -545,16 +782,14 @@ function drawMap(state) {
   const h = canvas.height;
   ctx.clearRect(0, 0, w, h);
 
-  const clip = Math.max(state.clipEff, 1);
   const pad = { l: 16, r: 16, t: 8, b: 8 };
   const innerW = w - pad.l - pad.r;
   const innerH = h - pad.t - pad.b;
-
-  const fieldV = 0.28 * clip;
-  ctx.fillStyle = MAP_FILL[regionOf(fieldV, state.low, state.high)];
+  const values = patchValues(state);
+  const fieldLum = values[0];
+  ctx.fillStyle = colorOf(state, fieldLum);
   ctx.fillRect(pad.l, pad.t, innerW, innerH);
 
-  const fractions = [0.15, 0.32, 0.5, 0.68, 0.82, 0.9, 0.96, 1.0];
   const cols = 4;
   const rows = 2;
   const gap = 12;
@@ -564,20 +799,17 @@ function drawMap(state) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  fractions.forEach((frac, i) => {
+  values.forEach((v, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
     const x = pad.l + gap + col * (cellW + gap);
     const y = pad.t + gap + row * (cellH + gap);
-    const v = frac * clip;
-    ctx.fillStyle = MAP_FILL[regionOf(v, state.low, state.high)];
+    ctx.fillStyle = colorOf(state, v);
     ctx.fillRect(x, y, cellW, cellH);
     ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
     ctx.fillStyle = "#111";
-    const label =
-      i === fractions.length - 1 ? `clip ${Math.round(v)}` : String(Math.round(v));
-    ctx.fillText(label, x + cellW / 2, y + cellH / 2);
+    ctx.fillText(String(Math.round(v)), x + cellW / 2, y + cellH / 2);
   });
 }
 
@@ -613,6 +845,17 @@ function loadSuggestJson(file) {
       els.high.value = String(pair.high ?? 3730);
       els.blend.value = String(pair.blend ?? 0.5);
       els.tone.value = String(pair.tone ?? 1);
+      const pair2 = data.pairs[1];
+      if (pair2) {
+        els.frames.value = "3";
+        els.gainDb2.value = String(pair2.gain_dB ?? 0);
+        els.conversion2.value = String(pair2.conversion_gain_ratio ?? 1);
+        els.low2.value = String(pair2.low ?? 6800);
+        els.high2.value = String(pair2.high ?? 7400);
+        els.blend2.value = String(pair2.blend ?? 0.5);
+      } else {
+        els.frames.value = "2";
+      }
       applyingPreset = false;
       redraw();
     } catch (err) {
@@ -626,6 +869,14 @@ function bind() {
   els.preset.addEventListener("change", () => {
     if (els.preset.value === "custom") return;
     applyPreset(els.preset.value);
+  });
+  els.frames.addEventListener("change", () => {
+    markCustom();
+    if (els.frames.value === "3" && PRESETS["3f"]) {
+      const p = PRESETS["3f"];
+      if (!els.low2.value) els.low2.value = String(p.low2);
+    }
+    redraw();
   });
   els.jsonFile.addEventListener("change", () => {
     const file = els.jsonFile.files && els.jsonFile.files[0];
@@ -642,6 +893,11 @@ function bind() {
     els.low,
     els.high,
     els.blend,
+    els.gainDb2,
+    els.conversion2,
+    els.low2,
+    els.high2,
+    els.blend2,
     els.tone,
   ];
   for (const el of inputs) {
