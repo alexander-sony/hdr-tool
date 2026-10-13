@@ -9,6 +9,9 @@
   --short: #2980b9;
   --comp: #2c3e50;
   --blend: #27ae60;
+  --map-long: #00d5d5;
+  --map-blend: #3ddc64;
+  --map-short: #f03a3a;
   --tone: #8e44ad;
   --ghost: #95a5a6;
   --warn: #a04000;
@@ -172,7 +175,8 @@ header h1 {
 .plots {
   min-height: 0;
   display: grid;
-  grid-template-rows: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
   gap: 0.45rem;
 }
 
@@ -192,11 +196,12 @@ figcaption {
   left: 0.55rem;
   right: 0.4rem;
   z-index: 1;
-  font-size: 0.78rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
-svg {
+svg,
+figure > canvas {
   position: absolute;
   left: 0.15rem;
   right: 0.15rem;
@@ -238,6 +243,24 @@ svg {
   fill: none;
 }
 
+.curve-map-long {
+  stroke: var(--map-long);
+  stroke-width: 2.25;
+  fill: none;
+}
+
+.curve-map-short {
+  stroke: var(--map-short);
+  stroke-width: 2.25;
+  fill: none;
+}
+
+.curve-map-blend {
+  stroke: var(--map-blend);
+  stroke-width: 2.25;
+  fill: none;
+}
+
 .curve-ghost {
   stroke: var(--ghost);
   stroke-width: 1.25;
@@ -252,14 +275,10 @@ svg {
 }
 
 .thresh {
-  stroke: var(--blend);
+  stroke: var(--fg);
   stroke-width: 1.5;
   stroke-dasharray: 5 4;
-}
-
-.blend-band {
-  fill: var(--blend);
-  opacity: 0.12;
+  opacity: 0.7;
 }
 
 .clip-line {
@@ -270,12 +289,12 @@ svg {
 
 .label {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .legend text {
   fill: var(--fg);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 @media (max-width: 860px) {

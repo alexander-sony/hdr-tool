@@ -102,7 +102,20 @@ const els = {
   plotGain: document.getElementById("plot-gain"),
   plotThresh: document.getElementById("plot-thresh"),
   plotTone: document.getElementById("plot-tone"),
+  plotMap: document.getElementById("plot-map"),
 };
+
+const MAP_FILL = {
+  long: "#00d5d5",
+  blend: "#3ddc64",
+  short: "#f03a3a",
+};
+
+function regionOf(v, low, high) {
+  if (v < low) return "long";
+  if (v >= high) return "short";
+  return "blend";
+}
 
 let applyingPreset = false;
 
@@ -225,12 +238,27 @@ function svgEl(name, attrs) {
 }
 
 function pathFrom(xs, ys, mapX, mapY) {
+  return pathFromMask(xs, ys, mapX, mapY, () => true);
+}
+
+function pathFromMask(xs, ys, mapX, mapY, keep) {
   let d = "";
+  let drawing = false;
   for (let i = 0; i < xs.length; i++) {
-    const cmd = i === 0 ? "M" : "L";
+    if (!keep(i)) {
+      drawing = false;
+      continue;
+    }
+    const cmd = drawing ? "L" : "M";
     d += `${cmd}${mapX(xs[i]).toFixed(2)},${mapY(ys[i]).toFixed(2)} `;
+    drawing = true;
   }
   return d.trim();
+}
+
+function appendPath(svg, cls, d) {
+  if (!d) return;
+  svg.appendChild(svgEl("path", { class: cls, d }));
 }
 
 function drawAxes(svg, pad, width, height, xMax, yMax, xLabel, yLabel) {
@@ -324,7 +352,7 @@ function drawAxes(svg, pad, width, height, xMax, yMax, xLabel, yLabel) {
 function legend(svg, items, x, y) {
   const g = svgEl("g", { class: "legend" });
   items.forEach((item, i) => {
-    const yy = y + i * 16;
+    const yy = y + i * 18;
     g.appendChild(
       svgEl("line", {
         x1: x,
@@ -415,21 +443,6 @@ function drawThreshPlot(state, samples) {
     "CIS output",
   );
 
-  // Thresholds compare against long-frame code (CIS Y), as in the Sony slide.
-  const bandLo = Math.max(0, Math.min(state.low, yMax));
-  const bandHi = Math.max(0, Math.min(state.high, yMax));
-  if (bandHi > bandLo) {
-    svg.appendChild(
-      svgEl("rect", {
-        class: "blend-band",
-        x: pad.l,
-        y: mapY(bandHi),
-        width: width - pad.l - pad.r,
-        height: Math.max(0, mapY(bandLo) - mapY(bandHi)),
-      }),
-    );
-  }
-
   for (const [val, label] of [
     [state.low, "Low"],
     [state.high, "High"],
@@ -463,29 +476,31 @@ function drawThreshPlot(state, samples) {
     }),
   );
 
-  svg.appendChild(
-    svgEl("path", {
-      class: "curve-long",
-      d: pathFrom(samples.xs, samples.longY, mapX, mapY),
-    }),
+  const inLong = (i) => samples.longY[i] < state.low;
+  const inBlend = (i) =>
+    samples.longY[i] >= state.low && samples.longY[i] < state.high;
+  const inShort = (i) => samples.longY[i] >= state.high;
+
+  appendPath(
+    svg,
+    "curve-map-long",
+    pathFromMask(samples.xs, samples.longY, mapX, mapY, inLong),
   );
-  svg.appendChild(
-    svgEl("path", {
-      class: "curve-short",
-      d: pathFrom(samples.xs, samples.shortY, mapX, mapY),
-    }),
+  appendPath(
+    svg,
+    "curve-map-blend",
+    pathFromMask(samples.xs, samples.compY, mapX, mapY, inBlend),
   );
-  svg.appendChild(
-    svgEl("path", {
-      class: "curve-comp",
-      d: pathFrom(samples.xs, samples.compY, mapX, mapY),
-    }),
+  appendPath(
+    svg,
+    "curve-map-short",
+    pathFromMask(samples.xs, samples.shortY, mapX, mapY, inShort),
   );
 
   legend(svg, [
-    { cls: "curve-long", label: "Long" },
-    { cls: "curve-short", label: "Short × G" },
-    { cls: "curve-comp", label: "Composite" },
+    { cls: "curve-map-long", label: "Long" },
+    { cls: "curve-map-blend", label: "Blend" },
+    { cls: "curve-map-short", label: "Short" },
   ], pad.l + 12, pad.t + 18);
 }
 
@@ -523,6 +538,49 @@ function drawTonePlot(state, samples) {
   ], pad.l + 12, pad.t + 18);
 }
 
+function drawMap(state) {
+  const canvas = els.plotMap;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const clip = Math.max(state.clipEff, 1);
+  const pad = { l: 16, r: 16, t: 8, b: 8 };
+  const innerW = w - pad.l - pad.r;
+  const innerH = h - pad.t - pad.b;
+
+  const fieldV = 0.28 * clip;
+  ctx.fillStyle = MAP_FILL[regionOf(fieldV, state.low, state.high)];
+  ctx.fillRect(pad.l, pad.t, innerW, innerH);
+
+  const fractions = [0.15, 0.32, 0.5, 0.68, 0.82, 0.9, 0.96, 1.0];
+  const cols = 4;
+  const rows = 2;
+  const gap = 12;
+  const cellW = (innerW - gap * (cols + 1)) / cols;
+  const cellH = (innerH - gap * (rows + 1)) / rows;
+  ctx.font = "12px Segoe UI, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  fractions.forEach((frac, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = pad.l + gap + col * (cellW + gap);
+    const y = pad.t + gap + row * (cellH + gap);
+    const v = frac * clip;
+    ctx.fillStyle = MAP_FILL[regionOf(v, state.low, state.high)];
+    ctx.fillRect(x, y, cellW, cellH);
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
+    ctx.fillStyle = "#111";
+    const label =
+      i === fractions.length - 1 ? `clip ${Math.round(v)}` : String(Math.round(v));
+    ctx.fillText(label, x + cellW / 2, y + cellH / 2);
+  });
+}
+
 function redraw() {
   const state = readState();
   setOutputs(state);
@@ -530,6 +588,7 @@ function redraw() {
   drawGainPlot(state, samples);
   drawThreshPlot(state, samples);
   drawTonePlot(state, samples);
+  drawMap(state);
 }
 
 function loadSuggestJson(file) {

@@ -16,7 +16,7 @@ uv run hdr-suggest LONG.raw MID.raw SHORT.raw --black 240
 
 # Curve explorer (`hdr-curves`)
 
-Local page that redraws the CHDR gain, threshold, and tone curves as you move the viewer knobs. Explains the curves; it does not composite real frames.
+Local page that redraws the CHDR gain, threshold, and tone curves as you move the viewer knobs, plus a synthetic 2F Map of a fake long-frame. Explains the curves; it does not composite real frames.
 
 ```
 uv run hdr-curves
