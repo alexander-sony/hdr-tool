@@ -82,6 +82,45 @@ function syntheticPeak(clipEff, appliedGain) {
   return clipEff * appliedGain;
 }
 
+function bitScale(bits) {
+  return Math.pow(2, bits - 12);
+}
+
+function defaultNoiseSigma(bits) {
+  return 2.6 * bitScale(bits);
+}
+
+/** RGGB offsets at 12-bit (R +8, Gr 0, Gb 0, B −8), scaled to native LSB. */
+function bayerOffsetAt(row, col, scale) {
+  const evenRow = row % 2 === 0;
+  const evenCol = col % 2 === 0;
+  if (evenRow && evenCol) return 8 * scale;
+  if (evenRow && !evenCol) return 0;
+  if (!evenRow && evenCol) return 0;
+  return -8 * scale;
+}
+
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return function next() {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function gaussianNoise(rand, sigma) {
+  if (sigma <= 0) return 0;
+  const u1 = Math.max(rand(), 1e-12);
+  const u2 = rand();
+  return sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+const SEAM_W = 64;
+const SEAM_H = 48;
+const SEAM_SEED = 0x5ead201;
+
 // --- DOM ---
 
 const els = {
@@ -120,16 +159,20 @@ const els = {
   blend2Out: document.getElementById("blend2-out"),
   tone: document.getElementById("tone"),
   toneOut: document.getElementById("tone-out"),
+  noise: document.getElementById("noise"),
+  noiseOut: document.getElementById("noise-out"),
   readout: document.getElementById("readout"),
   notes: document.getElementById("notes"),
   plotGain: document.getElementById("plot-gain"),
   plotThresh: document.getElementById("plot-thresh"),
   plotTone: document.getElementById("plot-tone"),
   plotMap: document.getElementById("plot-map"),
+  plotSeam: document.getElementById("plot-seam"),
+  seamCaption: document.getElementById("seam-caption"),
   synthView: document.querySelectorAll('input[name="synth-view"]'),
   capGain: document.querySelector("#plot-gain")?.closest("figure")?.querySelector("figcaption"),
   capThresh: document.querySelector("#plot-thresh")?.closest("figure")?.querySelector("figcaption"),
-  capMap: document.querySelector("#plot-map")?.closest("figure")?.querySelector("figcaption"),
+  capMap: document.querySelector(".synth-figure")?.querySelector("figcaption"),
 };
 
 const MAP_FILL_2F = {
@@ -209,6 +252,7 @@ function readState() {
     high2: Number(els.high2.value),
     blend2: Number(els.blend2.value),
     tone: Number(els.tone.value),
+    noise: Number(els.noise.value),
     mapView: document.querySelector('input[name="synth-view"]:checked')?.value || "map",
   };
 }
@@ -226,6 +270,7 @@ function setOutputs(state) {
   els.high2Out.textContent = String(Math.round(state.high2));
   els.blend2Out.textContent = state.blend2.toFixed(2);
   els.toneOut.textContent = String(state.tone);
+  els.noiseOut.textContent = state.noise.toFixed(1);
   els.pair2.classList.toggle("hidden", !state.is3f);
   els.matchRatioLabel.classList.toggle("hidden", state.is3f);
   els.trueRatioWrap.classList.toggle("hidden", state.is3f || state.matchRatio);
@@ -243,11 +288,25 @@ function setOutputs(state) {
   }
   if (els.capMap) {
     if (state.mapView === "grey") {
-      els.capMap.textContent = "4. Synthetic grey — stitched + tone (not a real frame)";
+      els.capMap.textContent =
+        "4. Synthetic grey + seam zoom — stitched + tone (not a real frame)";
     } else {
       els.capMap.textContent = state.is3f
-        ? "4. Synthetic Map — 3F regions (not a real frame)"
-        : "4. Synthetic Map — long-code patches vs Low/High (not a real frame)";
+        ? "4. Synthetic Map + seam zoom — 3F regions (not a real frame)"
+        : "4. Synthetic Map + seam zoom — Low/High (not a real frame)";
+    }
+  }
+  if (els.seamCaption) {
+    if (state.mapView === "grey") {
+      els.seamCaption.textContent = state.matchRatio
+        ? "Grey stitch of the same pixels. Uncheck “Short matches this gain” to see mottling from gain error."
+        : "Grey stitch with mismatched G vs true ratio — mottling in the blend band.";
+    } else if (state.is3f) {
+      els.seamCaption.textContent =
+        "Yellow is the Long–Mid blend window; other colours crossed a threshold from Bayer and noise.";
+    } else {
+      els.seamCaption.textContent =
+        "Green is the blend window; cyan/red dots crossed Low/High from Bayer and noise. Tighten Low/High or raise seam noise to see more speckles.";
     }
   }
 
@@ -300,6 +359,7 @@ function applyPreset(name) {
   els.high2.value = String(p.high2 ?? 7400);
   els.blend2.value = String(p.blend2 ?? 0.5);
   els.tone.value = String(p.tone);
+  els.noise.value = String(defaultNoiseSigma(p.bits));
   applyingPreset = false;
   redraw();
 }
@@ -844,6 +904,87 @@ function drawMap(state) {
   });
 }
 
+function seamMean(state) {
+  return (state.low + state.high) / 2;
+}
+
+function drawSeamZoom(state) {
+  const canvas = els.plotSeam;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const mean = seamMean(state);
+  const scale = bitScale(state.bits);
+  const rand = mulberry32(SEAM_SEED);
+  const peak = Math.max(
+    state.clipEff * (state.is3f ? state.g * state.g2 : state.g),
+    1,
+  );
+  const cellW = w / SEAM_W;
+  const cellH = h / SEAM_H;
+
+  for (let r = 0; r < SEAM_H; r++) {
+    for (let c = 0; c < SEAM_W; c++) {
+      const scene = mean + bayerOffsetAt(r, c, scale) + gaussianNoise(rand, state.noise);
+      const longCode = Math.min(Math.max(scene, 0), state.clipEff);
+      let fill;
+      if (state.mapView === "grey") {
+        const midG = Math.min(scene / state.trueRatio, state.clipEff) * state.g;
+        let stitched;
+        if (state.is3f) {
+          const shortG =
+            Math.min(scene / (state.trueRatio * state.trueRatio2), state.clipEff) *
+            state.g *
+            state.g2;
+          const c1 = composite(
+            longCode,
+            midG,
+            state.low,
+            state.high,
+            1 - state.blend,
+          );
+          stitched = composite(
+            c1,
+            shortG,
+            state.low2,
+            state.high2,
+            1 - state.blend2,
+          );
+        } else {
+          stitched = composite(longCode, midG, state.low, state.high, state.blend);
+        }
+        const g = Math.round(tone8bit(stitched, peak, state.tone));
+        fill = `rgb(${g},${g},${g})`;
+      } else if (state.is3f) {
+        const midG = Math.min(scene / state.trueRatio, state.clipEff) * state.g;
+        fill =
+          MAP_FILL_3F[
+            region3f(
+              longCode,
+              midG,
+              state.low,
+              state.high,
+              state.low2,
+              state.high2,
+            )
+          ];
+      } else {
+        fill = MAP_FILL_2F[region2f(longCode, state.low, state.high)];
+      }
+      ctx.fillStyle = fill;
+      ctx.fillRect(
+        Math.floor(c * cellW),
+        Math.floor(r * cellH),
+        Math.ceil(cellW) + 1,
+        Math.ceil(cellH) + 1,
+      );
+    }
+  }
+}
+
 function redraw() {
   const state = readState();
   setOutputs(state);
@@ -852,6 +993,7 @@ function redraw() {
   drawThreshPlot(state, samples);
   drawTonePlot(state, samples);
   drawMap(state);
+  drawSeamZoom(state);
 }
 
 function loadSuggestJson(file) {
@@ -933,6 +1075,7 @@ function bind() {
     els.high2,
     els.blend2,
     els.tone,
+    els.noise,
   ];
   for (const el of inputs) {
     el.addEventListener("input", () => {
@@ -946,6 +1089,9 @@ function bind() {
           const s = readState();
           els.trueRatio.value = String(s.g);
         }
+      }
+      if (el === els.bits) {
+        els.noise.value = String(defaultNoiseSigma(Number(els.bits.value)));
       }
       redraw();
     });

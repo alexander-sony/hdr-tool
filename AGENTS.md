@@ -16,7 +16,7 @@ uv run hdr-suggest LONG.raw MID.raw SHORT.raw --black 240
 
 # Curve explorer (`hdr-curves`)
 
-Local page that redraws the CHDR gain, threshold, and tone curves as you move the viewer knobs, plus a synthetic Map of a fake scene. 2F or 3F. Explains the curves; it does not composite real frames. 3F uses four thresholds and two blend windows (Function 5: red long, yellow LM-blend, purple mid, green MS-blend, cyan short). Mid–Short Low/High are Long-scale.
+Local page that redraws the CHDR gain, threshold, and tone curves as you move the viewer knobs, plus a synthetic Map of a fake scene. 2F or 3F. Explains the curves; it does not composite real frames. 3F uses four thresholds and two blend windows (Function 5: red long, yellow LM-blend, purple mid, green MS-blend, cyan short). Mid–Short Low/High are Long-scale. Seam zoom under the Map shows blend-window speckles from Bayer channel offsets plus read noise (Map colours or grey stitch of the same pixels).
 
 ```
 uv run hdr-curves

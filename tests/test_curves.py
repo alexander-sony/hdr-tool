@@ -110,3 +110,60 @@ def test_composite_3f_blend_weights_shorter_frame() -> None:
     short_g = np.array([4000.0])
     out = model.composite_3f(long_v, mid_g, short_g, 3430, 3730, 1.0, 6800, 7400, 0.5)
     assert out[0] == pytest.approx(4000.0)
+
+
+def test_bayer_offsets_rggb_scaled() -> None:
+    off12 = model.bayer_offsets(2, 2, scale=1.0)
+    assert off12[0, 0] == pytest.approx(8.0)
+    assert off12[0, 1] == pytest.approx(0.0)
+    assert off12[1, 0] == pytest.approx(0.0)
+    assert off12[1, 1] == pytest.approx(-8.0)
+    off8 = model.bayer_offsets(2, 2, scale=model.bit_scale(8))
+    assert off8[0, 0] == pytest.approx(0.5)
+    assert off8[1, 1] == pytest.approx(-0.5)
+    assert model.default_noise_sigma(12) == pytest.approx(2.6)
+    assert model.default_noise_sigma(8) == pytest.approx(2.6 / 16)
+
+
+def test_seam_long_codes_no_noise_uniform_region() -> None:
+    rng = np.random.default_rng(0)
+    mean = 3580.0
+    low, high = 3430.0, 3730.0
+    long_c = model.seam_long_codes(
+        mean, 8, 8, scale=1.0, sigma=0.0, clip_eff=3855.0, rng=rng
+    )
+    regions = {model.map_region_2f(float(v), low, high) for v in long_c.ravel()}
+    assert regions == {"blend"}
+
+
+def test_seam_bayer_can_straddle_narrow_window() -> None:
+    """With a tight window around the mean, R and B can leave the blend band."""
+    rng = np.random.default_rng(1)
+    mean = 100.0
+    scale = 1.0
+    low, high = 96.0, 104.0
+    long_c = model.seam_long_codes(
+        mean, 4, 4, scale=scale, sigma=0.0, clip_eff=3855.0, rng=rng
+    )
+    regions = [
+        model.map_region_2f(float(long_c[r, c]), low, high)
+        for r in range(4)
+        for c in range(4)
+    ]
+    assert "blend" in regions
+    assert "long" in regions or "short" in regions
+
+
+def test_seam_matched_gain_grey_equals_long_outside_blend() -> None:
+    rng = np.random.default_rng(2)
+    g = 2.0
+    clip = 3855.0
+    mean = 1000.0
+    scene = model.seam_scene_luminance(mean, 8, 8, scale=1.0, sigma=0.0, rng=rng)
+    long_c, _, short_g = model.frame_codes(
+        scene, true_ratio=g, applied_gain=g, clip_eff=clip
+    )
+    low, high = 3430.0, 3730.0
+    out = model.composite(long_c, short_g, low, high, blend=0.5)
+    assert np.all(long_c < low)
+    assert out == pytest.approx(long_c)

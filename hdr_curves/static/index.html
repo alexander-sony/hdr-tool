@@ -31,7 +31,7 @@
           </figcaption>
           <svg id="plot-tone" viewBox="0 0 640 360" role="img"></svg>
         </figure>
-        <figure>
+        <figure class="synth-figure">
           <figcaption>
             4. Synthetic Map — long-code patches vs Low/High (not a real frame)
           </figcaption>
@@ -45,7 +45,16 @@
               Grey
             </label>
           </div>
-          <canvas id="plot-map" width="640" height="360"></canvas>
+          <div class="synth-stack">
+            <canvas id="plot-map" width="640" height="200"></canvas>
+            <div class="seam-block">
+              <p class="seam-label">Seam zoom — blend window with Bayer + noise</p>
+              <canvas id="plot-seam" width="640" height="160"></canvas>
+              <p id="seam-caption" class="seam-caption">
+                Green is the blend window; cyan/red dots crossed Low/High from Bayer and noise.
+              </p>
+            </div>
+          </div>
         </figure>
       </section>
 
@@ -143,6 +152,13 @@
           <label>
             <span>Tone <output id="tone-out" for="tone"></output></span>
             <input type="range" id="tone" min="0" max="4" step="1" />
+          </label>
+          <label>
+            <span
+              >Seam noise [LSB]
+              <output id="noise-out" for="noise"></output
+            ></span>
+            <input type="range" id="noise" min="0" max="100" step="0.1" />
           </label>
         </div>
 

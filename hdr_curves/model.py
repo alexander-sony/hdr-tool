@@ -163,3 +163,76 @@ def composite_3f(
     """
     first = composite(long_code, mid_gained, low_lm, high_lm, 1.0 - blend_lm)
     return composite(first, short_gained, low_ms, high_ms, 1.0 - blend_ms)
+
+
+# Teaching stand-ins for mosaic channel imbalance at 12-bit (RGGB at 0,0).
+_BAYER_R_12 = 8.0
+_BAYER_GR_12 = 0.0
+_BAYER_GB_12 = 0.0
+_BAYER_B_12 = -8.0
+_NOISE_SIGMA_12 = 2.6
+
+
+def bit_scale(bits: int) -> float:
+    """Native LSB per 12-bit LSB: 8-bit 1/16, 10-bit 1/4, 12-bit 1."""
+    return float(2 ** (bits - 12))
+
+
+def default_noise_sigma(bits: int) -> float:
+    """Pedestal-noise figure used by hdr-suggest, in this frame's LSB."""
+    return _NOISE_SIGMA_12 * bit_scale(bits)
+
+
+def bayer_offsets(height: int, width: int, scale: float) -> np.ndarray:
+    """RGGB channel offsets in native LSB (phase at pixel 0,0 = R)."""
+    if height < 1 or width < 1:
+        raise ValueError("height and width must be >= 1")
+    if scale <= 0:
+        raise ValueError("scale must be > 0")
+    rows = np.arange(height)[:, None]
+    cols = np.arange(width)[None, :]
+    is_red = (rows % 2 == 0) & (cols % 2 == 0)
+    is_gr = (rows % 2 == 0) & (cols % 2 == 1)
+    is_gb = (rows % 2 == 1) & (cols % 2 == 0)
+    out = np.empty((height, width), dtype=np.float64)
+    out[is_red] = _BAYER_R_12 * scale
+    out[is_gr] = _BAYER_GR_12 * scale
+    out[is_gb] = _BAYER_GB_12 * scale
+    out[~is_red & ~is_gr & ~is_gb] = _BAYER_B_12 * scale
+    return out
+
+
+def seam_scene_luminance(
+    mean: float,
+    height: int,
+    width: int,
+    scale: float,
+    sigma: float,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Flat-patch scene in long LSB: mean + Bayer offsets + Gaussian noise.
+
+    Used by the seam zoom so neighboring mosaic sites can straddle Low/High.
+    """
+    if sigma < 0:
+        raise ValueError("sigma must be >= 0")
+    scene = mean + bayer_offsets(height, width, scale)
+    if sigma > 0:
+        scene = scene + rng.normal(0.0, sigma, size=(height, width))
+    return scene
+
+
+def seam_long_codes(
+    mean: float,
+    height: int,
+    width: int,
+    scale: float,
+    sigma: float,
+    clip_eff: float,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Long codes for a blend-window patch (clipped scene luminance)."""
+    if clip_eff <= 0:
+        raise ValueError("clip_eff must be > 0")
+    scene = seam_scene_luminance(mean, height, width, scale, sigma, rng)
+    return np.clip(scene, 0.0, clip_eff)
