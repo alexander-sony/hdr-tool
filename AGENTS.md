@@ -14,6 +14,16 @@ uv run hdr-suggest LONG.raw MID.raw SHORT.raw --black 240
 - Example set: `data/3f/` (`long-13p2-9db.bin`, `mid-6p6-9db.bin`, `short-3p3-9db.bin`). For 2F, pass long + short only (skip mid). Viewer screenshots of that 3F run: `data/3f/viewer/hdr-3f.png`, `data/3f/viewer/map-3f.png`.
 - HCG/LCG pair: `data/hcg-lcg/` with `--cg-mode hcg lcg`. Viewer: `data/hcg-lcg/viewer/hdr.png`, `data/hcg-lcg/viewer/map.png`.
 
+# Curve explorer (`hdr-curves`)
+
+Local page that redraws the CHDR gain, threshold, and tone curves as you move the viewer knobs. Explains the curves; it does not composite real frames.
+
+```
+uv run hdr-curves
+```
+
+Opens on http://127.0.0.1:10000/ (`--port` to change). Package: `hdr_curves`. Formulas live in `hdr_curves/model.py`; the page JS mirrors them. Tone is a labeled shadow-lift illustration (0 = linear), not Sony’s internal mapper. Presets cover `data/3f` 2F, HCG/LCG, and the tutorial slide numbers; you can also load `hdr-suggest --json` (first pair).
+
 # Preview images
 
 Viewable PNGs of unpacked raw frames. Demosaic and white balance only. Linear 8-bit (no gamma). Do not auto-stretch or otherwise enhance contrast: a common 12-bit white point keeps exposure/gain differences visible.

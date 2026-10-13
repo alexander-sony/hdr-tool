@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HDR curve explorer</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HDR curve explorer</h1>
+      <p class="lede">
+        How composite gain, merge thresholds, blend, and tone move the CHDR
+        curves. Formulas match
+        <code>hdr_backend_plan.md</code>; tone is a labeled shadow-lift
+        illustration, not Sony&rsquo;s internal mapper.
+      </p>
+    </header>
+
+    <section class="controls" aria-label="Parameters">
+      <div class="presets">
+        <label for="preset">Preset</label>
+        <select id="preset">
+          <option value="3f2f">2F data/3f (11.95 dB)</option>
+          <option value="hcg-lcg">HCG/LCG (0 dB × 2.9)</option>
+          <option value="slide">Slide example (30 dB × 2.6)</option>
+          <option value="custom">Custom</option>
+        </select>
+        <label class="file-label">
+          Load hdr-suggest JSON
+          <input type="file" id="json-file" accept="application/json,.json" />
+        </label>
+      </div>
+
+      <div class="grid">
+        <label>
+          Black [LSB]
+          <input type="number" id="black" min="0" max="1023" step="0.1" />
+        </label>
+        <label>
+          ADC bits
+          <input type="number" id="bits" min="8" max="16" step="1" />
+        </label>
+        <label>
+          Gain [dB]
+          <input type="range" id="gain-db" min="0" max="40" step="0.01" />
+          <output id="gain-db-out" for="gain-db"></output>
+        </label>
+        <label>
+          Conversion [×]
+          <input type="range" id="conversion" min="1" max="4" step="0.01" />
+          <output id="conversion-out" for="conversion"></output>
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="match-ratio" checked />
+          Short matches this gain (R = G)
+        </label>
+        <label id="true-ratio-wrap" class="hidden">
+          True ratio R
+          <input type="range" id="true-ratio" min="1" max="500" step="0.01" />
+          <output id="true-ratio-out" for="true-ratio"></output>
+        </label>
+        <label>
+          Low threshold [LSB]
+          <input type="range" id="low" min="0" max="8000" step="10" />
+          <output id="low-out" for="low"></output>
+        </label>
+        <label>
+          High threshold [LSB]
+          <input type="range" id="high" min="0" max="8000" step="10" />
+          <output id="high-out" for="high"></output>
+        </label>
+        <label>
+          Blend α
+          <input type="range" id="blend" min="0" max="1" step="0.01" />
+          <output id="blend-out" for="blend"></output>
+        </label>
+        <label>
+          Tone
+          <input type="range" id="tone" min="0" max="4" step="1" />
+          <output id="tone-out" for="tone"></output>
+        </label>
+      </div>
+
+      <p id="readout" class="readout" aria-live="polite"></p>
+      <p id="notes" class="notes" aria-live="polite"></p>
+    </section>
+
+    <section class="plots" aria-label="Curves">
+      <figure>
+        <figcaption>1. Composite gain — long vs short×G</figcaption>
+        <svg id="plot-gain" viewBox="0 0 640 360" role="img"></svg>
+      </figure>
+      <figure>
+        <figcaption>2. Threshold stitch — blend window on long code</figcaption>
+        <svg id="plot-thresh" viewBox="0 0 640 360" role="img"></svg>
+      </figure>
+      <figure>
+        <figcaption>
+          3. Tone mapping (8-bit) — illustration of the display path
+        </figcaption>
+        <svg id="plot-tone" viewBox="0 0 640 360" role="img"></svg>
+      </figure>
+    </section>
+
+    <script src="app.js"></script>
+  </body>
+</html>

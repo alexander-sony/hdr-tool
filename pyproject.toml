@@ -7,14 +7,16 @@ dependencies = [
     "numpy>=2.5.4",
     "pillow>=12.3.0",
 ]
-scripts = { hdr-suggest = "hdr_suggest.cli:main" }
+[project.scripts]
+hdr-suggest = "hdr_suggest.cli:main"
+hdr-curves = "hdr_curves.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.25,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = "hdr_suggest"
+module-name = ["hdr_suggest", "hdr_curves"]
 module-root = ""
 
 [dependency-groups]
