@@ -50,19 +50,6 @@ const PRESETS = {
     blend: 0.5,
     tone: 0,
   },
-  slide: {
-    frames: 2,
-    black: 200,
-    bits: 12,
-    gainDb: 30,
-    conversion: 2.6,
-    matchRatio: true,
-    trueRatio: null,
-    low: 800,
-    high: 1200,
-    blend: 0.5,
-    tone: 1,
-  },
 };
 
 // --- formulas (hdr_curves/model.py) ---
@@ -139,6 +126,7 @@ const els = {
   plotThresh: document.getElementById("plot-thresh"),
   plotTone: document.getElementById("plot-tone"),
   plotMap: document.getElementById("plot-map"),
+  synthView: document.querySelectorAll('input[name="synth-view"]'),
   capGain: document.querySelector("#plot-gain")?.closest("figure")?.querySelector("figcaption"),
   capThresh: document.querySelector("#plot-thresh")?.closest("figure")?.querySelector("figcaption"),
   capMap: document.querySelector("#plot-map")?.closest("figure")?.querySelector("figcaption"),
@@ -221,6 +209,7 @@ function readState() {
     high2: Number(els.high2.value),
     blend2: Number(els.blend2.value),
     tone: Number(els.tone.value),
+    mapView: document.querySelector('input[name="synth-view"]:checked')?.value || "map",
   };
 }
 
@@ -253,9 +242,13 @@ function setOutputs(state) {
       : "2. Threshold stitch — cyan long, green blend, red short";
   }
   if (els.capMap) {
-    els.capMap.textContent = state.is3f
-      ? "4. Synthetic Map — 3F regions (not a real frame)"
-      : "4. Synthetic Map — long-code patches vs Low/High (not a real frame)";
+    if (state.mapView === "grey") {
+      els.capMap.textContent = "4. Synthetic grey — stitched + tone (not a real frame)";
+    } else {
+      els.capMap.textContent = state.is3f
+        ? "4. Synthetic Map — 3F regions (not a real frame)"
+        : "4. Synthetic Map — long-code patches vs Low/High (not a real frame)";
+    }
   }
 
   const gTotal = state.is3f ? state.g * state.g2 : state.g;
@@ -748,10 +741,19 @@ function drawTonePlot(state, samples) {
 
 function patchValues(state) {
   const clip = Math.max(state.clipEff, 1);
+  const peak = clip * (state.is3f ? state.g * state.g2 : state.g);
   if (!state.is3f) {
-    return [0.15, 0.32, 0.5, 0.68, 0.82, 0.9, 0.96, 1.0].map((f) => f * clip);
+    return [
+      0.2 * state.low,
+      0.55 * state.low,
+      (state.low + state.high) / 2,
+      state.high + 0.3 * Math.max(clip - state.high, 50),
+      clip,
+      clip + 0.25 * Math.max(peak - clip, 0),
+      0.7 * peak,
+      0.96 * peak,
+    ];
   }
-  const peak = clip * state.g * state.g2;
   return [
     0.25 * state.low,
     0.7 * state.low,
@@ -764,7 +766,27 @@ function patchValues(state) {
   ];
 }
 
+function compositeAt(state, lum) {
+  const longCode = Math.min(lum, state.clipEff);
+  if (!state.is3f) {
+    const shortG = Math.min(lum / state.trueRatio, state.clipEff) * state.g;
+    return composite(longCode, shortG, state.low, state.high, state.blend);
+  }
+  const midG = Math.min(lum / state.trueRatio, state.clipEff) * state.g;
+  const shortG =
+    Math.min(lum / (state.trueRatio * state.trueRatio2), state.clipEff) *
+    state.g *
+    state.g2;
+  const c1 = composite(longCode, midG, state.low, state.high, 1 - state.blend);
+  return composite(c1, shortG, state.low2, state.high2, 1 - state.blend2);
+}
+
 function colorOf(state, lum) {
+  if (state.mapView === "grey") {
+    const peak = Math.max(state.clipEff * (state.is3f ? state.g * state.g2 : state.g), 1);
+    const g = Math.round(tone8bit(compositeAt(state, lum), peak, state.tone));
+    return `rgb(${g},${g},${g})`;
+  }
   const longCode = Math.min(lum, state.clipEff);
   if (!state.is3f) {
     return MAP_FILL_2F[region2f(longCode, state.low, state.high)];
@@ -808,7 +830,16 @@ function drawMap(state) {
     ctx.fillRect(x, y, cellW, cellH);
     ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
-    ctx.fillStyle = "#111";
+    let ink = "#111";
+    if (state.mapView === "grey") {
+      const peak = Math.max(
+        state.clipEff * (state.is3f ? state.g * state.g2 : state.g),
+        1,
+      );
+      const g = tone8bit(compositeAt(state, v), peak, state.tone);
+      ink = g < 140 ? "#eee" : "#111";
+    }
+    ctx.fillStyle = ink;
     ctx.fillText(String(Math.round(v)), x + cellW / 2, y + cellH / 2);
   });
 }
@@ -882,6 +913,9 @@ function bind() {
     const file = els.jsonFile.files && els.jsonFile.files[0];
     if (file) loadSuggestJson(file);
   });
+  for (const radio of els.synthView) {
+    radio.addEventListener("change", () => redraw());
+  }
 
   const inputs = [
     els.black,

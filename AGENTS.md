@@ -22,7 +22,7 @@ Local page that redraws the CHDR gain, threshold, and tone curves as you move th
 uv run hdr-curves
 ```
 
-Opens on http://127.0.0.1:10000/ (`--port` to change). Package: `hdr_curves`. Formulas live in `hdr_curves/model.py`; the page JS mirrors them. Tone is a labeled shadow-lift illustration (0 = linear), not Sony’s internal mapper. Presets cover `data/3f` 2F, HCG/LCG, and the tutorial slide numbers; you can also load `hdr-suggest --json` (first pair).
+Opens on http://127.0.0.1:10000/ (`--port` to change). Package: `hdr_curves`. Formulas live in `hdr_curves/model.py`; the page JS mirrors them. Tone is a labeled shadow-lift illustration (0 = linear), not Sony’s internal mapper. Presets cover `data/3f` 2F/3F and HCG/LCG; you can also load `hdr-suggest --json` (first pair).
 
 # Preview images
 

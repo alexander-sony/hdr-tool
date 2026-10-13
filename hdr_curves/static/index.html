@@ -35,6 +35,16 @@
           <figcaption>
             4. Synthetic Map — long-code patches vs Low/High (not a real frame)
           </figcaption>
+          <div class="view-switch" role="group" aria-label="Synthetic image view">
+            <label>
+              <input type="radio" name="synth-view" value="map" checked />
+              Map
+            </label>
+            <label>
+              <input type="radio" name="synth-view" value="grey" />
+              Grey
+            </label>
+          </div>
           <canvas id="plot-map" width="640" height="360"></canvas>
         </figure>
       </section>
@@ -54,7 +64,6 @@
               <option value="3f2f">2F data/3f (11.95 dB)</option>
               <option value="3f">3F data/3f (5.96 + 5.97 dB)</option>
               <option value="hcg-lcg">HCG/LCG (0 dB × 2.9)</option>
-              <option value="slide">Slide example (30 dB × 2.6)</option>
               <option value="custom">Custom</option>
             </select>
           </label>

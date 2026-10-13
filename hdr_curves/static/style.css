@@ -207,6 +207,46 @@ figcaption {
   font-weight: 600;
 }
 
+figure:has(.view-switch) figcaption {
+  right: 7.5rem;
+}
+
+.view-switch {
+  position: absolute;
+  top: 0.22rem;
+  right: 0.4rem;
+  z-index: 2;
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.view-switch label {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.view-switch label:has(input:checked) {
+  background: var(--border);
+  color: var(--fg);
+  font-weight: 650;
+}
+
+.view-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
 svg,
 figure > canvas {
   position: absolute;
